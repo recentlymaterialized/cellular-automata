@@ -5,7 +5,7 @@
 #include <cassert>
 
 // DISCLAIMER
-// i am a novice at c++. literally today i finished the course at https://learncpp.com . this was written to help me learn, not to be useful to anyone. my past programming experience is JavaScript on an iPhone; because of this, everything from variable names to formatting is horrendously minimized. i truly apologize.
+// i am a novice at c++. literally today [Dec 12 2022] i finished the course at https://learncpp.com. this was written to help me learn, not to be useful to anyone. my past programming experience is JavaScript on an iPhone; because of this, everything from variable names to formatting is horrendously minimized. i truly apologize.
 
 /***Usage***
 > Instances of this class hold a grid of cells and can
@@ -15,7 +15,7 @@
 
 Constructors:
 CellGrid(width, height, rule? = Life, generation? = 0)
-CellGrid(width, height, initialGrid, rule?, generation?)
+CellGrid(initialGrid, width, height, rule?, generation?)
 CellGrid(initialGrid, rule?, generation?)
 
 CellGrid myGrid(1024, 512, "B3/S23"); // New empty 1024x512 Life grid
@@ -76,6 +76,7 @@ const CellGrids and Rules are generally not supported
   - add options for different edge behaviors (current:torus, plane, bottle, cross, sphere, shift...?)
   - create new class TinyCellGrid with one-cell-per-bit, but slower
   - create new classes with more than 2 states, using char arrays
+  - use this to make something with graphics (help)
   - look up stuff about optimizing cellular automata
 */
 
@@ -563,10 +564,6 @@ public:
 	}
 	CellGrid& operator++() {
 		if (width != w || height != h) resize();
-		if (!started) {
-			for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) act[i][j] = true; // make this smarter
-			started = true;
-		}
 		if (!dst) {
 			dst = new bool[width];
 			dpv = new bool[width];
@@ -578,9 +575,64 @@ public:
 		bool flicker{ rule.canFlicker() };
 		const bool* birth{ rule.birthArr() };
 		const bool* death{ rule.deathArr() };
-		i32 hm1{ h - 1 }, neighbors;
+		const i32 wm1{ w - 1 }, hm1{ h - 1 };
 		auto edgeCount{ &CellGrid::torusCount }; // C++ is confusing
 		auto edgeSet{ flicker ? &CellGrid::torusSetFl : &CellGrid::torusSet };
+		if (!started) {
+			for (i32 i{}, j; i != h; ++i) {
+				bool* asp{ i ? act[i - 1] : act[hm1] },
+				    * asc{ act[i] },
+				    * asn{ i == hm1 ? act[i + 1] : *act };
+				for (j = 0;;) {
+					if (i && i != hm1 && j && j != -1) {
+						if (flicker) {
+							if (j != wm1 && j != w && dat[i][j])
+								asp[j-1] = asp[j] = asp[j+1] =
+								asc[j-1] = asc[j] = asc[j+1] =
+								asn[j-1] = asn[j] = asn[j+1] = true;
+							else if (--j != wm1 && dat[i][j])
+								asp[j-1] = asp[j] = asp[j+1] =
+								asc[j-1] = asc[j] = asc[j+1] =
+								asn[j-1] = asn[j] = asn[j+1] = true;
+							else if (dat[i][--j])
+								asp[j-1] = asp[j] = asp[j+1] =
+								asc[j-1] = asc[j] = asc[j+1] =
+								asn[j-1] = asn[j] = asn[j+1] = true;
+							j += 3;
+							if (j == w + 1) j = -1;
+						}
+						else {
+							if (dat[i][j])
+								asp[j-1] = asp[j] = asp[j+1] =
+								asc[j-1]          = asc[j+1] =
+								asn[j-1] = asn[j] = asn[j+1] = true;
+							++j;
+							if (j == wm1) j = -1;
+						}
+					}
+					else {
+						if (j == -1) j = wm1;
+						i32 jm1{ j ? j - 1 : wm1 },
+							jp1{ j == wm1 ? 0 : j + 1 };
+						if (flicker) {
+							if (dat[i][j]) {
+								asp[jm1] = asp[j] = asp[jp1] =
+								asc[jm1] = asc[j] = asc[jp1] =
+								asn[jm1] = asn[j] = asn[jp1] = true;
+								if (i && i != hm1) j += 2;
+							}
+						}
+						else if (dat[i][j])
+							asp[jm1] = asp[j] = asp[jp1] =
+							asc[jm1]          = asc[jp1] =
+							asn[jm1] = asn[j] = asn[jp1] = true;
+						if (j == wm1) break;
+						++j;
+					}
+				}
+			}
+			started = true;
+		}
 		for (i32 i{}; i != w; ++i) {
 			dst[i] =
 			dcr[i] = dat[0][i];
@@ -593,12 +645,13 @@ public:
 				act[1][i] = false;
 			}
 		}
+		int neighbors;
 		for (i32 x{}; x != w; ++x) if (acr[x]) {
 			neighbors = (this->*edgeCount)(x, 0); // i hate this syntax. https://stackoverflow.com/a/2402607 tysm
 			if (dcr[x]) { if (death[neighbors]) (this->*edgeSet)(x, 0, false); }
 			else if (birth[neighbors]) (this->*edgeSet)(x, 0, true);
 		}
-		if (h != 1) {
+		if (h != 1) { [[likely]];
 			bool* dnx, * asp, * asc, * asn;
 			for (i32 x, y{1}, xm1, xp1; y != hm1; ++y) {
 				dnx = dat[y + 1];
@@ -615,14 +668,14 @@ public:
 					if (*dcr) { if (death[neighbors]) (this->*edgeSet)(0, y, false); }
 					else if (birth[neighbors]) (this->*edgeSet)(0, y, true);
 				}
-				if (acr[w-1]) {
-					neighbors = (this->*edgeCount)(w-1, y);
-					if (dcr[w-1]) { if (death[neighbors]) (this->*edgeSet)(w-1, y, false); }
-					else if (birth[neighbors]) (this->*edgeSet)(w-1, y, true);
+				if (acr[wm1]) {
+					neighbors = (this->*edgeCount)(wm1, y);
+					if (dcr[wm1]) { if (death[neighbors]) (this->*edgeSet)(wm1, y, false); }
+					else if (birth[neighbors]) (this->*edgeSet)(wm1, y, true);
 				}
 				if (w != 1) {
 					xm1 = 0; x = 1; xp1 = 2;
-					if (flicker) {for (; x != w-1; ++x, ++xm1, ++xp1) if (acr[x]) {
+					if (flicker) {for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
 						neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
 						          + dcr[xm1]          + dcr[xp1]
 						          + dnx[xm1] + dnx[x] + dnx[xp1];
@@ -637,7 +690,7 @@ public:
 						asp[xm1] = asp[x] = asp[xp1] =
 						asc[xm1] = asc[x] = asc[xp1] =
 						asn[xm1] = asn[x] = asn[xp1] = true;
-					}} else for (; x != w-1; ++x, ++xm1, ++xp1) if (acr[x]) {
+					}} else for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
 						neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
 							+ dcr[xm1]          + dcr[xp1]
 							+ dnx[xm1] + dnx[x] + dnx[xp1];
