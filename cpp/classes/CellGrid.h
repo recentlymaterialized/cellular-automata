@@ -19,8 +19,8 @@ CellGrid(initialGrid, width, height, rule?, generation?)
 CellGrid(initialGrid, rule?, generation?)
 
 CellGrid myGrid(1024, 512, "B3/S23"); // New empty 1024x512 Life grid
-bool array2d[128][1024];
-CellGrid slimGrid(1024, 128, array2d); // New 1024x128 Life grid from array2d
+bool array2d[1024][96];
+CellGrid slimGrid(array2d, 96, 1024); // New 96x1024 Life grid from array2d
 CellGrid copyGrid(myGrid, '', 12); // Makes a copy of myGrid with generation=12
                                   (a two-dimensional container class with a
 								  .size() member function may alternatively
@@ -74,21 +74,21 @@ const CellGrids and Rules are generally not supported
   - add swap functions
   - integrate some std::algorithms to make simulations faster (or learn parallelism)
   - add options for different edge behaviors (current:torus, plane, bottle, cross, sphere, shift...?)
+  - support some new families of rules (isotropic, generations, LtL)
   - create new class TinyCellGrid with one-cell-per-bit, but slower
-  - create new classes with more than 2 states, using char arrays
   - use this to make something with graphics (help)
   - look up stuff about optimizing cellular automata
 */
 
 // source:  https://github.com/recentlymaterialized/cellular-automata/blob/main/cpp/classes/CellGrid.h
-// license: https://github.com/recentlymaterialized/cellular-automata/blob/main/LICENSE (MIT license)
+// license: https://github.com/recentlymaterialized/cellular-automata/blob/main/LICENSE  (MIT license)
 
 class CellGrid {
-	using u32 = std::uint_fast32_t;
-	using i32 = std::int_fast32_t;
+	using u32 = std::uint_fast32_t; // B/S rule codes (currently use 17 bits)
+	using i32 = std::int_fast32_t; // grid dimensions are 32 bits
 	static_assert(sizeof(i32) <= sizeof(size_t));
 protected:
-	static constexpr u32 defaultRule{ 0b00000110000000100 };
+	static constexpr u32 defaultRule{ 0b00000110000000100 }; // B3/S23 Conway's Game of Life
 	bool** dat, ** act, // stores grid and active cells
 		* dst{nullptr}, * dpv{nullptr}, * dcr{nullptr}, // helper arrays for calculations
 		* acr{nullptr}, * anx{nullptr}, * als{nullptr};
