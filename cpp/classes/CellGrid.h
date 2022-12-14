@@ -48,10 +48,11 @@ myGrid.data() // Returns const bool* const* access to the internal grid (array o
 myGrid.print()     // Prints grid to the console via std::ostream
 myGrid.print(true) // Prints grid and generation number
   (The grid is printed using char values 220, 223, 219, and space to display two cells per character)
+myGrid.printSafe(false, '#') // Prints grid without special characters (4x larger: two characters per cell)
 
 myGrid = std::move(oldGrid); // move semantics are allowed, but the rvalue CellGrid
                                 (oldGrid) is left in an unusable state
-oldGrid.isValid() == false // returns false if contents have been moved, otherwise true
+oldGrid.isValid() // returns false if contents have been moved away, otherwise true
 
 CellGrid::Rule member functions:
 myGrid.rule.b(n) // Returns true if an OFF cell becomes ON with n neighbors (birth)
@@ -322,36 +323,37 @@ protected:
 		grid.dst = grid.dpv = grid.dcr =
 		grid.acr = grid.anx = grid.als = nullptr;
 		grid.pRow = nullptr;
+		started = grid.started;
 	}
 public:
 	Rule rule;
-	u32 gen;
+	i32 gen;
 	i32 width, height;
-	CellGrid(i32 wdt, i32 hgt, u32 rl, u32 gn = 0)
+	CellGrid(i32 wdt, i32 hgt, u32 rl, i32 gn = 0)
 	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, char* rl, u32 gn = 0)
+	CellGrid(i32 wdt, i32 hgt, char* rl, i32 gn = 0)
 	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, Rule& rl, u32 gn = 0)
+	CellGrid(i32 wdt, i32 hgt, const Rule& rl, i32 gn = 0)
 	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, Rule&& rl, u32 gn = 0)
+	CellGrid(i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0)
 	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{std::move(rl), this}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{0u, this}
 		{ construct(wdt, hgt); }
-	CellGrid(const CellGrid& grid, char* rl, u32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
+	CellGrid(const CellGrid& grid, char* rl, i32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, char* rl) : CellGrid(grid, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, const Rule& rl, u32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
+	CellGrid(const CellGrid& grid, const Rule& rl, i32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, Rule&& rl, u32 gn) : CellGrid(grid.width, grid.height, std::move(rl), gn) {
+	CellGrid(const CellGrid& grid, Rule&& rl, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
@@ -361,19 +363,19 @@ public:
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.gen) {}
-	CellGrid(CellGrid&& grid, char* rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, char* rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		if (!(rule = rl)) throw "Invalid rule";
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, char* rl) : CellGrid(std::move(grid), rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, const Rule& rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, const Rule& rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		rule = rl;
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, const Rule& rl) : CellGrid(std::move(grid), rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, Rule&& rl, u32 gn) noexcept : rule{ this } {
+	CellGrid(CellGrid&& grid, Rule&& rl, i32 gn) noexcept : rule{ this } {
 		moveConstruct(std::move(grid));
 		rule = std::move(rl);
 		gen = gn;
@@ -384,71 +386,110 @@ public:
 		rule = rl;
 	}
 	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, u32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, u32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, u32 gn) : CellGrid(wdt, hgt, std::move(rl), gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, i32 gn) : CellGrid(wdt, hgt, std::move(rl), gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, u32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
-		if (!(rule = rl)) throw "Invalid rule";
+		if (started) {
+			started = false;
+			if (!(rule = rl)) throw "Invalid rule";
+			started = true;
+		} else if (!(rule = rl)) throw "Invalid rule";
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
-		rule = rl;
+		if (started) {
+			started = false;
+			rule = rl;
+			started = true;
+		} else rule = rl;
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
-		rule = std::move(rl);
+		if (started) {
+			started = false;
+			rule = std::move(rl);
+			started = true;
+		} else rule = std::move(rl);
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, u32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
-		rule = rl;
+		if (started) {
+			started = false;
+			rule = rl;
+			started = true;
+		} else rule = rl;
 		gen = gn;
 	}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.gen) {}
-
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, char* rl, u32 gn) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	 // expanding this out might be another 15 or so constructors (incl bool**&&). i don't feel like doing it right now.
-	 // am i crazy or do classes usually have this many constructors?
-	 // is there a better way to do this??
-	 // when i add templates for iterables it'll be another 30 or smth... not fun...
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
+		{ dat = cells; }
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn) {
+		// WIP
 
+	}
+	template<class T> CellGrid(T cells, char* rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn) {
+		// WIP
 
-			CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
-				{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	}
+	// am i crazy or do classes usually have this many constructors?
+	// is there a better way to do this??
 
 	virtual ~CellGrid() {
 		for (i32 i{}; i != h; ++i) {
