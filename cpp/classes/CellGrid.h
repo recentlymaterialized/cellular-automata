@@ -222,14 +222,25 @@ protected:
 		als = nullptr;
 		pRow = nullptr;
 	}
+public:
+	enum EdgeBehavior { plane, torus, bottle, cross, sphere };
+protected:
+	void primeEdge() {
+		for (i32 i{}; i != w; ++i) act[0][i] = act[h-1][i] = true;
+		for (i32 i{}; i != h; ++i) act[i][0] = act[i][w-1] = true;
+	}
 	class Rule {
 		CellGrid* const grid;
 		u32 code;
 		char* srep{nullptr};
 		bool bArr[9], dArr[9];
+		EdgeBehavior ebh;
+		i32 esh{};
+		bool vsh{};
 	public:
 		Rule(CellGrid* gd) noexcept : grid{ gd } {} // Use sparingly
-		Rule(u32 cd, CellGrid* gd) noexcept : code{ cd }, grid{ gd } {
+		Rule(CellGrid* gd, u32 cd, EdgeBehavior edgbhv = plane) noexcept
+		: grid{ gd }, code{ cd }, ebh{ edgbhv } {
 			if (!code) code = defaultRule; // initialization with 0 defaults to Life; this is not the case for assignment
 			if (code == -1) code = 131072; // rule 0 "B/S" stored as 2^17
 			u32 pos{1};
@@ -237,11 +248,13 @@ protected:
 			for (int i{1}; i != 9; ++i, pos <<= 1) bArr[i] = code & pos;
 			for (int i{0}; i != 9; ++i, pos <<= 1) dArr[i] = ~code & pos;
 		}
-		Rule(const Rule& rule, CellGrid* gd) : code{ rule.code }, grid{ gd } {
+		Rule(CellGrid* gd, const Rule& rule, EdgeBehavior edgbhv = plane)
+		: grid{ gd }, code{ rule.code }, ebh{ edgbhv } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i];
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i];
 		}
-		Rule(Rule&& rule, CellGrid* gd) noexcept : code{ rule.code }, grid{ gd } {
+		Rule(CellGrid* gd, Rule&& rule, EdgeBehavior edgbhv = plane) noexcept
+		: grid{ gd }, code{ rule.code }, ebh{ edgbhv } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i]; // these must be copied because they
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i]; //  are not dynamically allocated :(
 			if (rule.srep) {
@@ -249,7 +262,8 @@ protected:
 				rule.srep = nullptr;
 			}
 		}
-		Rule(char* rulestr, CellGrid* gd) : grid{ gd } {
+		Rule(CellGrid* gd, char* rulestr, EdgeBehavior edgbhv = plane)
+		: grid{ gd }, ebh{ edgbhv } {
 			if (!(operator=(rulestr))) throw "Invalid rulestring";
 		}
 		virtual ~Rule() { delete[] srep; }
@@ -341,7 +355,30 @@ protected:
 		}
 		bool operator==(u32 cd) { return code == cd; }
 		bool operator==(Rule& rl) { return code == rl.code; }
-		bool operator==(char* string) { return code == Rule{string, nullptr}.code; }
+		bool operator==(char* string) { return code == Rule{ nullptr, string }.code; }
+		void edge(EdgeBehavior edgbhv) {
+			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+			if (edgbhv > 4) throw "Invalid EdgeBehavior";
+			ebh = edgbhv;
+			if (grid->started) grid->primeEdge();
+		}
+		void shift(i32 shft) {
+			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+			if (grid->started) grid->primeEdge();
+			if (vsh) esh = shft % grid->h; // C++'s modulo % operator treats the dividend as an absolute
+			else esh = shft % grid->w;     //   value and then multiplies by the sign of the dividend
+		}
+		void shift(i32 shft, bool vshft) {
+			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+			if (grid->started) grid->primeEdge();
+			if (vshft) {
+				esh = shft % grid->h;
+				vshft = true;
+			} else {
+				esh = shft % grid->w;
+				vshft = false;
+			}
+		}
 		bool b(i32 i) const { return bArr[i]; }
 		bool s(i32 i) const { return !dArr[i]; }
 		bool d(i32 i) const { return dArr[i]; }
@@ -398,26 +435,22 @@ protected:
 		started = grid.started;
 	}
 public:
-	enum EdgeBehavior { plane, torus, bottle, cross, sphere };
 	Rule rule;
 	i32 gen;
 	i32 width, height;
-	EdgeBehavior edge;
-	i32 vShift;
-	i32 hShift;
 	CellGrid(i32 wdt, i32 hgt, u32 rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
-		{ construct(wdt, hgt); }
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus} // yaaaaaaaay i need more constructors
+		{ construct(wdt, hgt); }                                                // (unenthusiastic, sarcastic yaaaaay)
 	CellGrid(i32 wdt, i32 hgt, char* rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt, const Rule& rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{std::move(rl), this}
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, std::move(rl), torus}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{0u, this}
+	CellGrid(i32 wdt, i32 hgt) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{this, 0u, torus}
 		{ construct(wdt, hgt); }
 	CellGrid(const CellGrid& grid, char* rl, i32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
