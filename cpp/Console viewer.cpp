@@ -16,11 +16,12 @@ int main() {
     };
     std::mt19937 prng{sq};
     std::uniform_int_distribution bin{0, 1};
+    std::uniform_int_distribution cent{0, 99};
     constexpr auto cinlim{ std::numeric_limits<std::streamsize>::max() };
 
     char rule[21];
-    std::int_fast16_t width{1856}, height{1856};
-    std::int_fast32_t simlen{65536l};
+    std::int_fast16_t width{}, height{}, fill{};
+    std::int_fast32_t simlen{-1};
     cout << "Cellular automata simulation\n";
     do {
         cout << "Width: ";
@@ -42,17 +43,28 @@ int main() {
         retry = true;
     } while (!(grid.rule = rule));
     do {
+        cout << "Random fill percentage (%): "; // currently uses int; i will switch to floats soon
+        if (!(cin >> fill)) cin.clear();
+        cin.ignore(cinlim, '\n');
+    } while (fill < 1 || fill > 100);
+    do {
         cout << "Simulation length: ";
         if (!(cin >> simlen)) cin.clear();
         cin.ignore(cinlim, '\n');
     } while (simlen < 0 || simlen > 65535l);
 
-    for (int x, y{ height / 8 }; y != 7 * height / 8; ++y)
+    if (fill == 50) for (int x, y{ height / 8 }; y != 7 * height / 8; ++y)
         for (x = width / 8; x != 7 * width / 8; ++x) grid(x, y, bin(prng));
+    else for (int x, y{ height / 8 }; y != 7 * height / 8; ++y)
+        for (x = width / 8; x != 7 * width / 8; ++x) grid(x, y, cent(prng) < fill);
+    cout << "\nStart grid: ";
+    grid.print(true);
 
     grid += simlen;
-    cout << '\n' << grid << "\n\nProgram completed\n";
+    cout << "\n\nFinal grid - ";
+    grid.print(true);
 
+    cout << "\n\nProgram completed\n";
     char temp;
     cin >> temp;
     return 0;
