@@ -5,7 +5,7 @@
 #include <cassert>
 
 // DISCLAIMER
-// i am a novice at c++. literally today [Dec 12 2022] i finished the course at https://learncpp.com. this was written to help me learn, not to be useful to anyone. my past programming experience is JavaScript on an iPhone; because of this, everything from variable names to formatting is horrendously minimized. i truly apologize.
+// i am a novice at c++. this was written to help me learn, not to be useful to anyone. my past programming experience is JavaScript on an iPhone; because of this, everything from variable names to formatting is horrendously minimized. i truly apologize.
 
 /***Usage***
 > Instances of this class hold a grid of cells and can
@@ -464,8 +464,6 @@ public:
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
-		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
@@ -475,8 +473,6 @@ public:
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
-		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ dat = cells; }
