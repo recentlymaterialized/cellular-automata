@@ -460,7 +460,7 @@ public:
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
@@ -470,20 +470,29 @@ public:
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ dat = cells; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn) {
-		// WIP
-
-	}
-	template<class T> CellGrid(T cells, char* rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn) {
-		// WIP
-
-	}
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, char* rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn)
+		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, Rule& rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn)
+		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T cells, Rule&& rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), std::move(rl), gn)
+		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+	// i have to omit the u32 rulecode constructer here because the compiler will confuse it with the (width, height) constructor
+	template<class T> CellGrid(T cells) : CellGrid((*cells).size(), cells.size())
+		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
 	// am i crazy or do classes usually have this many constructors?
 	// is there a better way to do this??
 
@@ -914,12 +923,17 @@ public:
 			pRow[w+1] = '\0';
 			std::cout << pRow;
 		}
+		*pRow = static_cast<unsigned char>(255);
 	}
 	void printSafe(bool pGen = false, char ch1 = '\0', char ch2 = '\0') {
 		if (width != w || height != h) resize();
 		if (ch1) { if (!ch2) ch2 = ch1; }
 		else ch1 = '[', ch2 = ']';
 		if (!pRow) pRow = new char[w * 2 + 2];
+		else if (*pRow == 255) {
+			delete[] pRow;
+			pRow = new char[w * 2 + 2];
+		}
 		if (pGen) std::cout << "Generation " << gen << '\n';
 		for (i32 i{}, j; i < h; ++i) {
 			for (j = 0; j != w; ++j) {
