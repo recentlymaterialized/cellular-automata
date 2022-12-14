@@ -24,7 +24,7 @@ CellGrid slimGrid(array2d, 96, 1024); // New 96x1024 Life grid from array2d
 CellGrid copyGrid(myGrid, '', 12); // Makes a copy of myGrid with generation=12
                                   (a two-dimensional container class with a
 								  .size() member function may alternatively
-								   be used as initialGrid here) --coming soon--
+								   be used as initialGrid here)
 
 myGrid(30, 20) // Gets value of cell at x:30, y:20
 myGrid(30, 20, 1) // Sets cell at x:30, y:20 to ON
@@ -70,15 +70,16 @@ const CellGrids and Rules are generally not supported
 
 /*
   to do:
-  - allow CellGrid to be constructed with any iterable container type
   - clean up the ridiculous mess i've made with the constructors
   - add swap functions
   - integrate some std::algorithms to make simulations faster (or learn parallelism)
-  - add options for different edge behaviors (current:torus, plane, bottle, cross, sphere, shift...?)
+  - add options for different edge behaviors (in progress!)
   - support some new families of rules (isotropic, generations, LtL)
-  - create new class TinyCellGrid with one-cell-per-bit, but slower
   - use this to make something with graphics (help)
   - look up stuff about optimizing cellular automata
+
+  HOW IS GOLLY SO FAST????
+  i read through the quicklife code and understood nothing :'(
 */
 
 // source:  https://github.com/recentlymaterialized/cellular-automata/blob/main/cpp/classes/CellGrid.h
@@ -96,41 +97,112 @@ protected:
 	bool started{}; // if false, act is treated as uninitialized
 	char* pRow{nullptr}; // helper array for printing
 	i32 w, h;
+	i32 planeCount(i32 x, i32 y) {
+		if (y) {if (y == h - 1) { // why am i optimizing an edge case
+			if (x) {
+				if (x == w - 1) [[unlikely]] return dpv[x - 1] + dpv[x] + dcr[x - 1];
+				else [[likely]] return dpv[x - 1] + dpv[x] + dpv[x + 1] + dcr[x - 1] + dcr[x + 1];
+			} else [[unlikely]] return dpv[x] + dpv[x+1] + dcr[x+1];
+		} else {
+			if (x) return dpv[x-1] + dpv[x] + dcr[x-1] + dat[y+1][x-1] + dat[y+1][x];
+			else return dpv[x] + dpv[x+1] + dcr[x+1] + dat[y+1][x] + dat[y+1][x+1];
+		}}
+		else {
+			if (x) {
+				if (x == w - 1) [[unlikely]] return dcr[x-1] + dat[1][x-1] + dat[1][x];
+				else [[likely]] return dcr[x-1] + dcr[x+1] + dat[1][x-1] + dat[1][x] + dat[1][x+1];
+			} else [[unlikely]] return dcr[x+1] + dat[1][x] + dat[1][x+1];
+		}
+	}
 	i32 torusCount(i32 x, i32 y) {
 		bool* dnx{ y + 1 == h ? dst : dat[y+1] };
 		i32 xpv{ x ? x - 1 : w - 1 },
 			xnx{ x + 1 == w ? 0 : x + 1 };
 		return dpv[xpv] + dpv[x] + dpv[xnx]
-		     + dcr[xpv]          + dcr[xnx]
-		     + dnx[xpv] + dnx[x] + dnx[xnx];
+			+ dcr[xpv]          + dcr[xnx]
+			+ dnx[xpv] + dnx[x] + dnx[xnx];
 	}
-	i32 planeCount(i32 x, i32 y) {
-		// coming soon...?
+	i32 shTorusCount(i32 x, i32 y) {}
+	i32 bottleCount(i32 x, i32 y) {}
+	i32 shBottleCount(i32 x, i32 y) {}
+	i32 crossCount(i32 x, i32 y) {}
+	i32 shCrossCount(i32 x, i32 y) {}
+	i32 sphereCount(i32 x, i32 y) {}
+	// i don't think shift works with spheres? i will look into it
+	void planeSet(i32 x, i32 y, bool state) {
+		dat[y][x] = state;
+		if (y) {if (y == h - 1) {
+			bool* anp{ act[y - 1] }; // does this make it faster or slower?
+			if (x) {
+				if (x == w - 1) [[unlikely]] anp[x-1] = anp[x] = act[y][x-1] = true;
+				else [[likely]] anp[x-1] = anp[x] = anp[x+1] = act[y][x-1] = act[y][x+1] = true;
+			} else [[unlikely]] anp[x] = anp[x+1] = act[y][x+1] = true;
+		} else {
+			if (x) act[y-1][x-1] = act[y-1][x] = act[y][x-1] = act[y+1][x-1] = act[y+1][x] = true;
+			else act[y-1][x] = act[y-1][x+1] = act[y][x+1] = act[y+1][x] = act[y+1][x+1] = true;
+		}}
+		else {
+			bool* ann{ act[y + 1] };
+			if (x) {
+				if (x == w - 1) [[unlikely]] act[y][x-1] = ann[x-1] = ann[x] = true;
+				else [[likely]] act[y][x-1] = act[y][x+1] = ann[x-1] = ann[x] = ann[x+1] = true;
+			} else [[unlikely]] act[y][x+1] = ann[x] = ann[x+1] = true;
+		}
+	}
+	void planeSetFl(i32 x, i32 y, bool state) {
+		dat[y][x] = state;
+		if (y) {if (y == h - 1) {
+			bool* anp{ act[y - 1] }, * anc{ act[y] }; // does this make it faster or slower?
+			if (x) {                                 // how computationally expensive is subtracting 1?
+				if (x == w - 1) [[unlikely]] anp[x-1] = anp[x] = anc[x-1] = anc[x] = true;
+				else [[likely]] anp[x-1] = anp[x] = anp[x+1] = anc[x-1] = anc[x] = anc[x+1] = true;
+			} else [[unlikely]] anp[x] = anp[x+1] = anc[x] = anc[x+1] = true;
+		} else {
+			if (x) act[y-1][x-1] = act[y-1][x] = act[y][x-1] = act[y][x] = act[y+1][x-1] = act[y+1][x] = true;
+			else act[y-1][x] = act[y-1][x+1] = act[y][x] = act[y][x+1] = act[y+1][x] = act[y+1][x+1] = true;
+		}}
+		else {
+			bool* anc{ act[y] }, * ann{ act[y + 1] };
+			if (x) {
+				if (x == w - 1) [[unlikely]] anc[x-1] = anc[x] = ann[x-1] = ann[x] = true;
+				else [[likely]] anc[x-1] = anc[x] = anc[x+1] = ann[x-1] = ann[x] = ann[x+1] = true;
+			} else [[unlikely]] anc[x] = anc[x+1] = ann[x] = ann[x+1] = true;
+		}
 	}
 	void torusSet(i32 x, i32 y, bool state) {
 		dat[y][x] = state;
 		bool* anp{ y ? act[y-1] : act[h-1] },
-		    * anc{ act[y] },
-		    * ann{ y + 1 == h ? *act : act[y+1] };
+			* anc{ act[y] },
+			* ann{ y + 1 == h ? *act : act[y+1] };
 		i32 xpv{ x ? x - 1 : w - 1 },
-		       xnx{ x + 1 == w ? 0 : x + 1 };
+			xnx{ x + 1 == w ? 0 : x + 1 };
 		anp[xpv] = anp[x] = anp[xnx] =
-		anc[xpv]          = anc[xnx] =
-		ann[xpv] = ann[x] = ann[xnx] = true;
+			anc[xpv]          = anc[xnx] =
+			ann[xpv] = ann[x] = ann[xnx] = true;
 	}
 	void torusSetFl(i32 x, i32 y, bool state) {
 		dat[y][x] = state;
 		bool* anp{ y ? act[y-1] : act[h-1] },
-		    * anc{ act[y] },
-		    * ann{ y + 1 == h ? *act : act[y+1] };
+			* anc{ act[y] },
+			* ann{ y + 1 == h ? *act : act[y+1] };
 		i32 xpv{ x ? x - 1 : w - 1 },
-		       xnx{ x + 1 == w ? 0 : x + 1 };
+			xnx{ x + 1 == w ? 0 : x + 1 };
 		anp[xpv] = anp[x] = anp[xnx] =
-		anc[xpv] = anc[x] = anc[xnx] =
-		ann[xpv] = ann[x] = ann[xnx] = true;
+			anc[xpv] = anc[x] = anc[xnx] =
+			ann[xpv] = ann[x] = ann[xnx] = true;
 	}
-	void planeSet(i32 x, i32 y, bool state) {}
-	void planeSetFl(i32 x, i32 y, bool state) {}
+	i32 shTorusSet(i32 x, i32 y) {}
+	i32 shTorusSetFl(i32 x, i32 y) {}
+	i32 bottleSet(i32 x, i32 y) {}
+	i32 bottleSetFl(i32 x, i32 y) {}
+	i32 shBottleSet(i32 x, i32 y) {}
+	i32 shBottleSetFl(i32 x, i32 y) {}
+	i32 crossSet(i32 x, i32 y) {}
+	i32 crossSetFl(i32 x, i32 y) {}
+	i32 shCrossSet(i32 x, i32 y) {}
+	i32 shCrossSetFl(i32 x, i32 y) {}
+	i32 sphereSet(i32 x, i32 y) {}
+	i32 sphereSetFl(i32 x, i32 y) {}
 	void weakResize() noexcept {
 		assert(width > 0 && height > 0); // asserts don't count as exceptions right...?
 		w = width;
@@ -326,9 +398,13 @@ protected:
 		started = grid.started;
 	}
 public:
+	enum EdgeBehavior { plane, torus, bottle, cross, sphere };
 	Rule rule;
 	i32 gen;
 	i32 width, height;
+	EdgeBehavior edge;
+	i32 vShift;
+	i32 hShift;
 	CellGrid(i32 wdt, i32 hgt, u32 rl, i32 gn = 0)
 	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{rl, this}
 		{ construct(wdt, hgt); }
