@@ -123,10 +123,8 @@ protected:
 			+ dnx[xpv] + dnx[x] + dnx[xnx];
 	}
 	i32 shTorusCount(i32 x, i32 y) {}
-	i32 bottleCount(i32 x, i32 y) {}
-	i32 shBottleCount(i32 x, i32 y) {}
-	i32 crossCount(i32 x, i32 y) {}
-	i32 shCrossCount(i32 x, i32 y) {}
+	i32 crossesCount(i32 x, i32 y) {} // horz. bottle, vert. bottle, and cross-surface
+	i32 shCrossesCount(i32 x, i32 y) {}
 	i32 sphereCount(i32 x, i32 y) {}
 	// i don't think shift works with spheres? i will look into it
 	void planeSet(i32 x, i32 y, bool state) {
@@ -193,14 +191,10 @@ protected:
 	}
 	i32 shTorusSet(i32 x, i32 y) {}
 	i32 shTorusSetFl(i32 x, i32 y) {}
-	i32 bottleSet(i32 x, i32 y) {}
-	i32 bottleSetFl(i32 x, i32 y) {}
-	i32 shBottleSet(i32 x, i32 y) {}
-	i32 shBottleSetFl(i32 x, i32 y) {}
-	i32 crossSet(i32 x, i32 y) {}
-	i32 crossSetFl(i32 x, i32 y) {}
-	i32 shCrossSet(i32 x, i32 y) {}
-	i32 shCrossSetFl(i32 x, i32 y) {}
+	i32 crossesSet(i32 x, i32 y) {}
+	i32 crossesSetFl(i32 x, i32 y) {}
+	i32 shCrossesSet(i32 x, i32 y) {}
+	i32 shCrossesSetFl(i32 x, i32 y) {}
 	i32 sphereSet(i32 x, i32 y) {}
 	i32 sphereSetFl(i32 x, i32 y) {}
 	void weakResize() noexcept {
@@ -223,24 +217,25 @@ protected:
 		pRow = nullptr;
 	}
 public:
-	enum EdgeBehavior { plane, torus, bottle, cross, sphere };
+	enum EdgeBhvr { plane, torus, vbottle, hbottle, cross, sphere, bottle = 2 };
 protected:
 	void primeEdge() {
 		for (i32 i{}; i != w; ++i) act[0][i] = act[h-1][i] = true;
 		for (i32 i{}; i != h; ++i) act[i][0] = act[i][w-1] = true;
 	}
 	class Rule {
+		friend CellGrid;
 		CellGrid* const grid;
 		u32 code;
 		char* srep{nullptr};
 		bool bArr[9], dArr[9];
-		EdgeBehavior ebh;
+		EdgeBhvr ebh;
 		i32 esh{};
 		bool vsh{};
 	public:
 		Rule(CellGrid* gd) noexcept : grid{ gd } {} // Use sparingly
-		Rule(CellGrid* gd, u32 cd, EdgeBehavior edgbhv = plane) noexcept
-		: grid{ gd }, code{ cd }, ebh{ edgbhv } {
+		Rule(CellGrid* gd, u32 cd, EdgeBhvr egbh = plane) noexcept
+		: grid{ gd }, code{ cd }, ebh{ egbh } {
 			if (!code) code = defaultRule; // initialization with 0 defaults to Life; this is not the case for assignment
 			if (code == -1) code = 131072; // rule 0 "B/S" stored as 2^17
 			u32 pos{1};
@@ -248,13 +243,13 @@ protected:
 			for (int i{1}; i != 9; ++i, pos <<= 1) bArr[i] = code & pos;
 			for (int i{0}; i != 9; ++i, pos <<= 1) dArr[i] = ~code & pos;
 		}
-		Rule(CellGrid* gd, const Rule& rule, EdgeBehavior edgbhv = plane)
-		: grid{ gd }, code{ rule.code }, ebh{ edgbhv } {
+		Rule(CellGrid* gd, const Rule& rule, EdgeBhvr egbh = plane)
+		: grid{ gd }, code{ rule.code }, ebh{ egbh } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i];
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i];
 		}
-		Rule(CellGrid* gd, Rule&& rule, EdgeBehavior edgbhv = plane) noexcept
-		: grid{ gd }, code{ rule.code }, ebh{ edgbhv } {
+		Rule(CellGrid* gd, Rule&& rule, EdgeBhvr egbh = plane) noexcept
+		: grid{ gd }, code{ rule.code }, ebh{ egbh } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i]; // these must be copied because they
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i]; //  are not dynamically allocated :(
 			if (rule.srep) {
@@ -262,8 +257,8 @@ protected:
 				rule.srep = nullptr;
 			}
 		}
-		Rule(CellGrid* gd, char* rulestr, EdgeBehavior edgbhv = plane)
-		: grid{ gd }, ebh{ edgbhv } {
+		Rule(CellGrid* gd, char* rulestr, EdgeBhvr egbh = plane)
+		: grid{ gd }, ebh{ egbh } {
 			if (!(operator=(rulestr))) throw "Invalid rulestring";
 		}
 		virtual ~Rule() { delete[] srep; }
@@ -356,15 +351,15 @@ protected:
 		bool operator==(u32 cd) { return code == cd; }
 		bool operator==(Rule& rl) { return code == rl.code; }
 		bool operator==(char* string) { return code == Rule{ nullptr, string }.code; }
-		void edge(EdgeBehavior edgbhv) {
+		void edge(EdgeBhvr egbh) {
 			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-			if (edgbhv > 4) throw "Invalid EdgeBehavior";
-			ebh = edgbhv;
-			if (grid->started) grid->primeEdge();
+			else if (grid->started) grid->primeEdge();
+			if (egbh > 4) throw "Invalid EdgeBhvr";
+			ebh = egbh;
 		}
 		void shift(i32 shft) {
 			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-			if (grid->started) grid->primeEdge();
+			else if (grid->started) grid->primeEdge();
 			if (vsh) esh = shft % grid->h; // C++'s modulo % operator treats the dividend as an absolute
 			else esh = shft % grid->w;     //   value and then multiplies by the sign of the dividend
 		}
@@ -438,85 +433,123 @@ public:
 	Rule rule;
 	i32 gen;
 	i32 width, height;
-	CellGrid(i32 wdt, i32 hgt, u32 rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus} // yaaaaaaaay i need more constructors
-		{ construct(wdt, hgt); }                                                // (unenthusiastic, sarcastic yaaaaay)
-	CellGrid(i32 wdt, i32 hgt, char* rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus}
+	CellGrid(i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, const Rule& rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, torus}
+	CellGrid(i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, std::move(rl), torus}
+	CellGrid(i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{this, 0u, torus}
+	CellGrid(i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, std::move(rl), egbh}
 		{ construct(wdt, hgt); }
-	CellGrid(const CellGrid& grid, char* rl, i32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
+	CellGrid(i32 wdt, i32 hgt, EdgeBhvr egbh = plane) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{this, 0u, egbh}
+		{ construct(wdt, hgt); }          // default edge behavior is now plane, not torus!
+	CellGrid(const CellGrid& grid, char* rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, char* rl) : CellGrid(grid, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, const Rule& rl, i32 gn) : CellGrid(grid.width, grid.height, rl, gn) {
+	CellGrid(const CellGrid& grid, char* rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, rl, egbh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, Rule&& rl, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), gn) {
+	CellGrid(const CellGrid& grid, char* rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid, std::move(rl), grid.gen) {}
-	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.width, grid.height, rl, grid.gen) {
+	CellGrid(const CellGrid& grid, const Rule& rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.gen) {}
-	CellGrid(CellGrid&& grid, char* rl, i32 gn) : rule{ this } {
+	CellGrid(const CellGrid& grid, const Rule& rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, rl, egbh, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid, Rule&& rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), egbh, gn) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid, Rule&& rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, std::move(rl), egbh, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid.width, grid.height, std::move(rl), grid.rule.ebh, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid, u32 rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	// the constructor (CellGrid&, u32, EdgeBhvr) would be confused by the compiler with (CellGrid&, i32, i32) :(
+	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, char* rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		if (!(rule = rl)) throw "Invalid rule";
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, char* rl) : CellGrid(std::move(grid), rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, const Rule& rl, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, char* rl, EdgeBhvr egbh) : CellGrid(std::move(grid), rl, egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, char* rl) : CellGrid(std::move(grid), rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, const Rule& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		rule = rl;
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, const Rule& rl) : CellGrid(std::move(grid), rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, Rule&& rl, i32 gn) noexcept : rule{ this } {
+	CellGrid(CellGrid&& grid, const Rule& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), rl, egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, const Rule& rl) : CellGrid(std::move(grid), rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, Rule&& rl, EdgeBhvr egbh, i32 gn) noexcept : rule{ this } {
 		moveConstruct(std::move(grid));
 		rule = std::move(rl);
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, Rule&& rl) : CellGrid(std::move(grid), std::move(rl), grid.gen) {}
+	CellGrid(CellGrid&& grid, Rule&& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), std::move(rl), egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, Rule&& rl) : CellGrid(std::move(grid), std::move(rl), grid.rule.ebh, grid.gen) {}
 	CellGrid(CellGrid&& grid, u32 rl) : rule{ this } {
 		moveConstruct(std::move(grid));
 		rule = rl;
+		rule.ebh = grid.rule.ebh;
+		gen = grid.gen;
 	}
-	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.rule.ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, i32 gn) : CellGrid(wdt, hgt, std::move(rl), gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, std::move(rl), egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, i32 gn) : CellGrid(wdt, hgt, rl, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, std::move(rl), egbh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.rule.ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, i32 gn) : rule{ this } {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -525,10 +558,12 @@ public:
 			if (!(rule = rl)) throw "Invalid rule";
 			started = true;
 		} else if (!(rule = rl)) throw "Invalid rule";
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -537,10 +572,12 @@ public:
 			rule = rl;
 			started = true;
 		} else rule = rl;
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -549,10 +586,12 @@ public:
 			rule = std::move(rl);
 			started = true;
 		} else rule = std::move(rl);
+		rule.ebh = egbh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -563,43 +602,46 @@ public:
 		} else rule = rl;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.gen) {}
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.rule.ebh, grid.gen) {}
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
 		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ dat = cells; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, i32 gn = 0) : CellGrid(wdt, hgt, rl, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, char* rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn)
+	template<class T> CellGrid(T cells, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule& rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, gn)
+	template<class T> CellGrid(T cells, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule&& rl, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), std::move(rl), gn)
+	template<class T> CellGrid(T cells, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), std::move(rl), egbh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	// i have to omit the u32 rulecode constructer here because the compiler will confuse it with the (width, height) constructor
+	template<class T> CellGrid(T cells, i32 rl, EdgeBhvr egbh, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
+		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+		// egbh cannot be optional: if egbh is optional, the compiler could confuse this with the (i32 width, i32 height) constructor.
 	template<class T> CellGrid(T cells) : CellGrid((*cells).size(), cells.size())
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
 	// am i crazy or do classes usually have this many constructors?
@@ -1001,8 +1043,8 @@ public:
 						nac[i][0] = nac[i][w-1] = nac[i][w] = nac[i][width-1] = true;
 					else for (i = 0; i != height; ++i) nac[i][0] = nac[i][width-1] = true;
 					nac[height-1][width-1] = true;
-					if (w < width) nac[height-1][w] = (h > height) ? true : nac[h][w] = true;
-					if (h < height) nac[h][width-1] = (w >  width) ? true : nac[h][w] = true;
+					if (w < width) nac[height-1][w] = (h >= height) ? true : nac[h][w] = true;
+					if (h < height) nac[h][width-1] = (w >=  width) ? true : nac[h][w] = true;
 				}
 			}
 			delete[] dat;
