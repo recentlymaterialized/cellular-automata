@@ -1,4 +1,4 @@
-#ifndef recentlymaterialized_CellGrid
+#ifndef recentlymaterialized_CellGrid // what is the ## operator?
 #define recentlymaterialized_CellGrid
 #include <iostream>
 #include <cstdint>
@@ -14,17 +14,21 @@
 > Freely extensible: no private members
 
 Constructors:
-CellGrid(width, height, rule? = Life, generation? = 0)
-CellGrid(initialGrid, width, height, rule?, generation?)
-CellGrid(initialGrid, rule?, generation?)
+CellGrid(width, height, rule? = Life, edgeBehavior? = plane, generation? = 0)
+CellGrid(initialGrid, width, height, rule?, edgeBehavior?, generation?)
+CellGrid(initialGrid, rule?, edgeBehavior?, generation?)
+// some constructors are not available due to conflicts. most of the constructors currently have issues that i will try to fix
 
 CellGrid myGrid(1024, 512, "B3/S23"); // New empty 1024x512 Life grid
 bool array2d[1024][96];
 CellGrid slimGrid(array2d, 96, 1024); // New 96x1024 Life grid from array2d
-CellGrid copyGrid(myGrid, '', 12); // Makes a copy of myGrid with generation=12
-                                  (a two-dimensional container class with a
-								  .size() member function may alternatively
-								   be used as initialGrid here)
+CellGrid copyGrid(myGrid, '', 0, 12); // Makes a copy of myGrid with generation=12
+                                    (a two-dimensional container class with a
+                                    .size() member function may alternatively
+                                     be used as initialGrid here) -- currently not working because i
+                                                                     have no idea how templates work
+.
+CellGrid member functions:
 
 myGrid(30, 20) // Gets value of cell at x:30, y:20
 myGrid(30, 20, 1) // Sets cell at x:30, y:20 to ON
@@ -37,7 +41,8 @@ myGrid.width = 25;      // Width, height, generation, and
 myGrid.height = 800;       rule may be changed freely as
 myGrid.gen = 4001;         desired (note: B0 not allowed)
 myGrid.rule = "B36/S23";
-myGrid.rule = copyGrid.rule = 0b00000110000100100;
+myGrid.rule = copyGrid.rule = 0b00000110000100100l; // bits 0-7 are birth conditions for 1-8 neighbors;
+                                                      bits 8-16 are survival conditions for 0-8 neighbors
 
 myGrid.count()      // Returns the number of ON  cells in grid
 myGrid.count(false) // Returns the number of OFF cells in grid
@@ -61,24 +66,57 @@ myGrid.rule.d(n) // Returns true if an ON cell becomes OFF with n neighbors (dea
 myGrid.rule.birthArr(),
 myGrid.rule.deathArr() // Returns array of 9 const bools for each possible number of neighbors (0-8)
 (unsigned long)(myGrid.rule) // Converts to a 17-bit integer of B/S behavior (Life = 3076)
-(char*)(myGrid.rule) OR myGrid.rule.str() // Returns a human-readable string ("B3/S23")
+(char*)(myGrid.rule) OR myGrid.rule.cstr() // Returns a human-readable C-style string ("B3/S23")
                                            (allocated & created on first run; dies when rule changes or dies)
 myGrid.rule = "..." // Sets rule to rulestring "...", returns true if successful, false if rulestring is invalid
+
+// You can['t] change the topology, or "edge behavior", of the grid: whether cells at one
+    edge of the grid wrap around to meet cells on another edge.
+// There are currently 5 options for edge behavior (of type CellGrid::Topology):
+   Identifier     | Value |    Description
+CellGrid::plane   |   0   |  No edge joining. Cells outside the grid are considered OFF.
+CellGrid::torus   |   1   |  Cells on the left/right edges are adjacent to the cell on the opposite edge on the same
+-                 |       |    row. Cells on the top/bottom edges are adjacent to the opposite cell on their column.
+CellGrid::bottle, |   2   |  Similar to torus, but cells on the top/bottom edges are adjacent to the opposite cell
+CellGrid::vbottle |       |    on the opposite column. CellGrid::bottle is an alias for CellGrid::vbottle.
+CellGrid::hbottle |   3   |  A horizontal version of the Klein bottle. (vbottle is usually faster)
+CellGrid::cross   |   4   |  Cross-surface: cells on the L/R and T/B edges meet on the opposite row/column.
+CellGrid::sphere  |   5   |  Similar to torus, but adjacent edges meet, rather than opposite edges. (width = height)
+CellGrid::pillow  |   6   |  Similar to plane, but cells outside the grid take on the state of the nearest valid cell.
+The edge topology may be included in the grid's constructor, or modified by setting grid.edge or grid.topology.
+Additionally, joined edges may be "shifted" relative to each other (see diagram at bottom of file) using the
+.shift() member function. This has no effect on planes.
+
+Examples:
+CellGrid torusGrid(50, 50, "", CellGrid::torus) // rule defaults to Life
+CellGrid sphereGrid(torusGrid, "", 5) // 5 is converted to its corresponding Topology enumeration, CellGrid::sphere
+sphereGrid.edge = CellGrid::cross // sphereGrid is now a cross-surface
+torusGrid.shift(2) // the top & bottom edges of torusGrid are now shifted 2 cells relative to each other
+                   // (imagine a rectangular tiling of CellGrids, where each next row is shifted 2 cells to the right)
+torusGrid.shift(-4) // torusGrid is now shifted horizontally 4 cells in the opposite direction
+torusGrid.shift(2, true) // torusGrid is now shifted vertically 2 cells
+	[ edge behavior is currently unfinished;
+	  the only currently functional options
+	    are plane, torus, and shifted torus ]
+// The names of the edge behaviors (as C-style strings) are stored in the non-const static member
+   CellGrid::Topology::names. The name of Topology instance may be accessed using .cstr().
+// Basic overloads for std::ostream::operator<< are provided for CellGrid, CellGrid::Rule, and CellGrid::Topology.
 
 const CellGrids and Rules are generally not supported
 ***********/
 
 /*
   to do:
-  - clean up the ridiculous mess i've made with the constructors
+  - fix the issues with the constructors
   - add swap functions
+  - support std::string and std::string_view
   - integrate some std::algorithms to make simulations faster (or learn parallelism)
   - add options for different edge behaviors (in progress!)
   - support some new families of rules (isotropic, generations, LtL)
   - use this to make something with graphics (help)
   - look up stuff about optimizing cellular automata
 
-  HOW IS GOLLY SO FAST????
+  HOW IS GOLLY SO FAST?????
   i read through the quicklife code and understood nothing :'(
 */
 
@@ -87,18 +125,25 @@ const CellGrids and Rules are generally not supported
 
 class CellGrid {
 	using u32 = std::uint_fast32_t; // B/S rule codes (currently use 17 bits)
-	using i32 = std::int_fast32_t; // grid dimensions are 32 bits
+	using i32 = std::int_fast32_t; // grid dimensions are 32-bit integers
+	using i64 = std::int_fast64_t; // why not
+	using uch = unsigned char;
+public:
 	static_assert(sizeof(i32) <= sizeof(size_t));
+	static constexpr u32 defaultRule{ 0b00000110000000100l }; // B3/S23 Conway's Game of Life
+	  /*  it won't let me make defaultRule non-const :(  */
 protected:
-	static constexpr u32 defaultRule{ 0b00000110000000100 }; // B3/S23 Conway's Game of Life
 	bool** dat, ** act, // stores grid and active cells
-		* dst{nullptr}, * dpv{nullptr}, * dcr{nullptr}, // helper arrays for calculations
-		* acr{nullptr}, * anx{nullptr}, * als{nullptr};
+	     * dst{nullptr}, * dpv{nullptr}, * dcr{nullptr}, // helper arrays for calculations
+	     * acr{nullptr}, * anx{nullptr}, * als{nullptr},
+	     * dlf{nullptr}, * drg{nullptr};
 	bool started{}; // if false, act is treated as uninitialized
-	char* pRow{nullptr}; // helper array for printing
+	uch* pRow{nullptr}; // helper array for printing
 	i32 w, h;
+	i32 esh{};
+	bool vsh{};
 	i32 planeCount(i32 x, i32 y) {
-		if (y) {if (y == h - 1) { // why am i optimizing an edge case
+		if (y) {if (y == h - 1) { // would one return statement and a bunch of ternary ?: operators be faster?
 			if (x) {
 				if (x == w - 1) [[unlikely]] return dpv[x - 1] + dpv[x] + dcr[x - 1];
 				else [[likely]] return dpv[x - 1] + dpv[x] + dpv[x + 1] + dcr[x - 1] + dcr[x + 1];
@@ -117,16 +162,36 @@ protected:
 	i32 torusCount(i32 x, i32 y) {
 		bool* dnx{ y + 1 == h ? dst : dat[y+1] };
 		i32 xpv{ x ? x - 1 : w - 1 },
-			xnx{ x + 1 == w ? 0 : x + 1 };
+		    xnx{ x + 1 == w ? 0 : x + 1 };
 		return dpv[xpv] + dpv[x] + dpv[xnx]
-			+ dcr[xpv]          + dcr[xnx]
-			+ dnx[xpv] + dnx[x] + dnx[xnx];
+		     + dcr[xpv]          + dcr[xnx]
+		     + dnx[xpv] + dnx[x] + dnx[xnx];
 	}
-	i32 shTorusCount(i32 x, i32 y) {}
-	i32 crossesCount(i32 x, i32 y) {} // horz. bottle, vert. bottle, and cross-surface
-	i32 shCrossesCount(i32 x, i32 y) {}
-	i32 sphereCount(i32 x, i32 y) {}
-	// i don't think shift works with spheres? i will look into it
+	i32 shTorusCount(i32 x, i32 y) {
+		if (vsh) {
+			// add column arrays
+		}
+		i32 xpv{ x ? x - 1 : w - 1 },
+			xnx{ x + 1 == w ? 0 : x + 1 };
+		if (y) {if (y + 1 == h) {
+			i32 xew{ x - esh + w };
+			return dpv[xpv] + dpv[x] + dpv[xnx] + dcr[xpv] + dcr[xnx]
+			     + dst[(xew-1) % w] + dst[xew % w] + dst[(xew+1) % w];
+		} else
+			return dpv[xpv] + dpv[x] + dpv[xnx] + dcr[xpv] + dcr[xnx]
+			     + dat[y+1][xpv] + dat[y+1][x] + dat[y+1][xnx];
+		} else {
+			i32 xew{ x + esh + w };
+			return dpv[(xew-1) % w] + dpv[xew % w] + dpv[(xew+1) % w]
+			     + dcr[xpv] + dcr[xnx] + dat[y+1][xpv] + dat[y+1][x] + dat[y+1][xnx];
+		}
+	}
+	i32 crossesCount(i32 x, i32 y) { return torusCount(x, y); } // horz. bottle, vert. bottle, and cross-surface
+	i32 shCrossesCount(i32 x, i32 y) { return shTorusCount(x, y); }
+	i32 sphereCount(i32 x, i32 y) { return torusCount(x, y); }
+	i32 shSphereCount(i32 x, i32 y) { return shTorusCount(x, y); } // shift can work with spheres and crosses,
+	i32 pillowCount(i32 x, i32 y) { return planeCount(x, y); }     //   but it's messy
+	i32 shPillowCount(i32 x, i32 y) { return planeCount(x, y); }
 	void planeSet(i32 x, i32 y, bool state) {
 		dat[y][x] = state;
 		if (y) {if (y == h - 1) {
@@ -170,72 +235,100 @@ protected:
 	void torusSet(i32 x, i32 y, bool state) {
 		dat[y][x] = state;
 		bool* anp{ y ? act[y-1] : act[h-1] },
-			* anc{ act[y] },
-			* ann{ y + 1 == h ? *act : act[y+1] };
+		    * anc{ act[y] },
+		    * ann{ y + 1 == h ? *act : act[y+1] };
 		i32 xpv{ x ? x - 1 : w - 1 },
 			xnx{ x + 1 == w ? 0 : x + 1 };
 		anp[xpv] = anp[x] = anp[xnx] =
-			anc[xpv]          = anc[xnx] =
-			ann[xpv] = ann[x] = ann[xnx] = true;
+		anc[xpv]          = anc[xnx] =
+		ann[xpv] = ann[x] = ann[xnx] = true;
 	}
 	void torusSetFl(i32 x, i32 y, bool state) {
 		dat[y][x] = state;
 		bool* anp{ y ? act[y-1] : act[h-1] },
-			* anc{ act[y] },
-			* ann{ y + 1 == h ? *act : act[y+1] };
+		    * anc{ act[y] },
+		    * ann{ y + 1 == h ? *act : act[y+1] };
+		i32 xpv{ x ? x - 1 : w - 1 },
+		    xnx{ x + 1 == w ? 0 : x + 1 };
+		anp[xpv] = anp[x] = anp[xnx] =
+		anc[xpv] = anc[x] = anc[xnx] =
+		ann[xpv] = ann[x] = ann[xnx] = true;
+	}
+	void shTorusSet(i32 x, i32 y, bool state) {
+		dat[y][x] = state;
 		i32 xpv{ x ? x - 1 : w - 1 },
 			xnx{ x + 1 == w ? 0 : x + 1 };
-		anp[xpv] = anp[x] = anp[xnx] =
-			anc[xpv] = anc[x] = anc[xnx] =
-			ann[xpv] = ann[x] = ann[xnx] = true;
+		if (vsh) {
+			// why am i allowing vertical shift... i regret this
+		}
+		bool* anc{ act[y] }; // does this make it faster or slower?
+		if (y) {if (y + 1 == h) {
+			bool* anp{ act[y - 1] }, * ann{ *act };
+			i32 xew{ x - esh + w };
+			anp[xpv] = anp[x] = anp[xnx] = anc[xpv] = anc[xnx]
+			= ann[(xew-1) % w] = ann[xew % w] = ann[(xew+1) % w] = true;
+		} else {
+			bool* anp{ act[y - 1] }, * ann{ act[y + 1] };
+			anp[xpv] = anp[x] = anp[xnx] = anc[xpv] = anc[xnx]
+			= ann[xpv] = ann[x] = ann[xnx] = true;
+		}} else {
+			bool* anp{ act[h - 1] }, * ann{ act[y + 1] };
+			i32 xew{ x + esh + w };
+			anp[(xew-1) % w] = anp[xew % w] = anp[(xew+1) % w]
+			= anc[xpv] = anc[xnx] = ann[xpv] = ann[x] = ann[xnx] = true;
+		}
 	}
-	i32 shTorusSet(i32 x, i32 y) {}
-	i32 shTorusSetFl(i32 x, i32 y) {}
-	i32 crossesSet(i32 x, i32 y) {}
-	i32 crossesSetFl(i32 x, i32 y) {}
-	i32 shCrossesSet(i32 x, i32 y) {}
-	i32 shCrossesSetFl(i32 x, i32 y) {}
-	i32 sphereSet(i32 x, i32 y) {}
-	i32 sphereSetFl(i32 x, i32 y) {}
-	void weakResize() noexcept {
-		assert(width > 0 && height > 0); // asserts don't count as exceptions right...?
-		w = width;
-		h = height;
-		delete[] dst;
-		delete[] dpv;
-		delete[] dcr;
-		delete[] acr;
-		delete[] anx;
-		delete[] als;
-		delete[] pRow;
-		dst = nullptr;
-		dpv = nullptr;
-		dcr = nullptr;
-		acr = nullptr;
-		anx = nullptr;
-		als = nullptr;
-		pRow = nullptr;
+	void shTorusSetFl(i32 x, i32 y, bool state) {
+		dat[y][x] = state;
+		i32 xpv{ x ? x - 1 : w - 1 },
+			xnx{ x + 1 == w ? 0 : x + 1 };
+		if (vsh) {
+			
+		}
+		bool* anc{ act[y] };
+		if (y) {if (y + 1 == h) {
+			bool* anp{ act[y - 1] }, * ann{ *act };
+			i32 xew{ x - esh + w };
+			anp[xpv] = anp[x] = anp[xnx] = anc[xpv] = anc[x] = anc[xnx]
+			= ann[(xew-1) % w] = ann[xew % w] = ann[(xew+1) % w] = true;
+		} else {
+			bool* anp{ act[y - 1] }, * ann{ act[y + 1] };
+			anp[xpv] = anp[x] = anp[xnx] = anc[xpv] = anc[x] = anc[xnx]
+			= ann[xpv] = ann[x] = ann[xnx] = true;
+		}} else {
+			bool* anp{ act[h - 1] }, * ann{ act[y + 1] };
+			i32 xew{ x + esh + w };
+			anp[(xew-1) % w] = anp[xew % w] = anp[(xew+1) % w]
+			= anc[xpv] = anc[x] = anc[xnx] = ann[xpv] = ann[x] = ann[xnx] = true;
+		}
 	}
-public:
-	enum EdgeBhvr { plane, torus, vbottle, hbottle, cross, sphere, bottle = 2 };
-protected:
+	void crossesSet(i32 x, i32 y, bool state) { torusSet(x, y, state); }
+	void crossesSetFl(i32 x, i32 y, bool state) { torusSetFl(x, y, state); }
+	void shCrossesSet(i32 x, i32 y, bool state) { shTorusSet(x, y, state); }
+	void shCrossesSetFl(i32 x, i32 y, bool state) { shTorusSetFl(x, y, state); }
+	void sphereSet(i32 x, i32 y, bool state) { torusSet(x, y, state); }
+	void sphereSetFl(i32 x, i32 y, bool state) { torusSetFl(x, y, state); }
+	void shSphereSet(i32 x, i32 y, bool state) { shTorusSet(x, y, state); }
+	void shSphereSetFl(i32 x, i32 y, bool state) { shTorusSetFl(x, y, state); }
+	void pillowSet(i32 x, i32 y, bool state) { planeSet(x, y, state); }
+	void pillowSetFl(i32 x, i32 y, bool state) { planeSetFl(x, y, state); }
+	void shPillowSet(i32 x, i32 y, bool state) { planeSet(x, y, state); }
+	void shPillowSetFl(i32 x, i32 y, bool state) { planeSetFl(x, y, state); }
 	void primeEdge() {
 		for (i32 i{}; i != w; ++i) act[0][i] = act[h-1][i] = true;
 		for (i32 i{}; i != h; ++i) act[i][0] = act[i][w-1] = true;
 	}
 	class Rule {
+	protected:
 		friend CellGrid;
 		CellGrid* const grid;
 		u32 code;
 		char* srep{nullptr};
 		bool bArr[9], dArr[9];
-		EdgeBhvr ebh;
-		i32 esh{};
-		bool vsh{};
 	public:
 		Rule(CellGrid* gd) noexcept : grid{ gd } {} // Use sparingly
-		Rule(CellGrid* gd, u32 cd, EdgeBhvr egbh = plane) noexcept
-		: grid{ gd }, code{ cd }, ebh{ egbh } {
+		Rule(CellGrid* gd, u32 cd) noexcept
+		: grid{ gd }, code{ cd } {
 			if (!code) code = defaultRule; // initialization with 0 defaults to Life; this is not the case for assignment
 			if (code == -1) code = 131072; // rule 0 "B/S" stored as 2^17
 			u32 pos{1};
@@ -243,22 +336,22 @@ protected:
 			for (int i{1}; i != 9; ++i, pos <<= 1) bArr[i] = code & pos;
 			for (int i{0}; i != 9; ++i, pos <<= 1) dArr[i] = ~code & pos;
 		}
-		Rule(CellGrid* gd, const Rule& rule, EdgeBhvr egbh = plane)
-		: grid{ gd }, code{ rule.code }, ebh{ egbh } {
+		Rule(CellGrid* gd, const Rule& rule)
+		: grid{ gd }, code{ rule.code } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i];
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i];
 		}
-		Rule(CellGrid* gd, Rule&& rule, EdgeBhvr egbh = plane) noexcept
-		: grid{ gd }, code{ rule.code }, ebh{ egbh } {
+		Rule(CellGrid* gd, Rule&& rule) noexcept
+		: grid{ gd }, code{ rule.code } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i]; // these must be copied because they
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i]; //  are not dynamically allocated :(
-			if (rule.srep) {
-				srep = rule.srep;
+			if (rule.srep) {	                          //  (more dynamic allocation will be used
+				srep = rule.srep;                         // when more families of rules are added)
 				rule.srep = nullptr;
 			}
 		}
-		Rule(CellGrid* gd, char* rulestr, EdgeBhvr egbh = plane)
-		: grid{ gd }, ebh{ egbh } {
+		Rule(CellGrid* gd, const char* rulestr)
+		: grid{ gd } {
 			if (!(operator=(rulestr))) throw "Invalid rulestring";
 		}
 		virtual ~Rule() { delete[] srep; }
@@ -286,8 +379,8 @@ protected:
 		Rule& operator=(Rule&& rule) noexcept {
 			if (rule.code != code) {
 				code = rule.code;
-				for (i32 i{1}; i != 9; ++i) bArr[i] = rule.bArr[i];
-				for (i32 i{0}; i != 9; ++i) dArr[i] = rule.dArr[i];
+				for (int i{1}; i != 9; ++i) bArr[i] = rule.bArr[i];
+				for (int i{0}; i != 9; ++i) dArr[i] = rule.dArr[i];
 				if (grid && grid->started) for (i32 i{}, j; i != grid->h; ++i)
 					for (j = 0; j != grid->w; ++j) grid->act[i][j] = true;
 				delete[] srep;
@@ -299,7 +392,7 @@ protected:
 			}
 			return *this;
 		}
-		bool operator=(char* string) {
+		bool operator=(const char* string) {
 			if (string == nullptr) {
 				operator=(defaultRule); // Life
 				return true;
@@ -330,7 +423,7 @@ protected:
 				num = string[i] - 48;
 				if (!(stage || num)) return false;
 				pos = stage ? 512 : 1;
-				for (char i{}; i != num; ++i) pos <<= 1;
+				for (int i{}; i != num; ++i) pos <<= 1;
 				newCode |= pos >> 1;
 				continue;
 			case '/':
@@ -351,39 +444,16 @@ protected:
 		bool operator==(u32 cd) { return code == cd; }
 		bool operator==(Rule& rl) { return code == rl.code; }
 		bool operator==(char* string) { return code == Rule{ nullptr, string }.code; }
-		void edge(EdgeBhvr egbh) {
-			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-			else if (grid->started) grid->primeEdge();
-			if (egbh > 4) throw "Invalid EdgeBhvr";
-			ebh = egbh;
-		}
-		void shift(i32 shft) {
-			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-			else if (grid->started) grid->primeEdge();
-			if (vsh) esh = shft % grid->h; // C++'s modulo % operator treats the dividend as an absolute
-			else esh = shft % grid->w;     //   value and then multiplies by the sign of the dividend
-		}
-		void shift(i32 shft, bool vshft) {
-			if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-			if (grid->started) grid->primeEdge();
-			if (vshft) {
-				esh = shft % grid->h;
-				vshft = true;
-			} else {
-				esh = shft % grid->w;
-				vshft = false;
-			}
-		}
-		bool b(i32 i) const { return bArr[i]; }
-		bool s(i32 i) const { return !dArr[i]; }
-		bool d(i32 i) const { return dArr[i]; }
+		bool b(int i) const { return bArr[i]; }
+		bool s(int i) const { return !dArr[i]; }
+		bool d(int i) const { return dArr[i]; }
 		const bool* birthArr() const { return bArr; }
 		const bool* deathArr() const { return dArr; }
 		bool canFlicker() const {
 			for (int i{}; i != 9; ++i) if (bArr[i] && dArr[i]) return true;
 			return false;
 		}
-		char* str() {
+		const char* cstr() {
 			if (!srep) {
 				int i{}, count{4};
 				u32 pos{1};
@@ -391,20 +461,24 @@ protected:
 				srep = new char[count] {'B'};
 				count = 0;
 				for (pos = 1; pos != 256; ++i, pos <<= 1)
-					if (code & pos) srep[++count] = i + '1';
+					if (code & pos) srep[++count] = '1' + i;
 				srep[++count] = '/';
 				srep[++count] = 'S';
 				for (i = 0; pos != 131072l; ++i, pos <<= 1)
-					if (code & pos) srep[++count] = i + '0';
+					if (code & pos) srep[++count] = '0' + i;
 				srep[++count] = '\0';
 			}
 			return srep;
 		}
-		operator char* () { return str(); }
+		operator const char*() { return cstr(); }
 		operator u32() const { return code; }
+		bool operator==(u32 code2) const { return code == code2; }
+		bool operator!=(u32 code2) const { return code != code2; }
+		friend std::ostream& operator<<(std::ostream& out, Rule& rule) { return out << rule.cstr(); }
 	};
 	void construct(i32 wdt, i32 hgt) {
-		assert(wdt > 0 && wdt < 65536l && hgt > 0 && hgt < 65536l);
+		assert(wdt > 0 && wdt < 65536l && hgt > 0 && hgt < 65536l
+			&& (edge != sphere || wdt == hgt)); // if topology is sphere, width must equal height
 		dat = new bool*[hgt];
 		act = new bool*[hgt];
 		for (i32 i{}, j; i != hgt; ++i) {
@@ -430,140 +504,186 @@ protected:
 		started = grid.started;
 	}
 public:
-	Rule rule;
-	i32 gen;
+	class Topology { // This is a class instead of an enumeration to resolve ambiguities in the CellGrid constructors
+	protected:
+		friend CellGrid;
+		CellGrid* const grid;
+		char id;
+		Topology(CellGrid* parent) : grid{parent} {} // Use sparingly
+		Topology(CellGrid* parent, const Topology& top) : grid{parent}, id{top.id} {}
+		Topology(CellGrid* parent, char code) : grid{parent}, id{code} { assert(code >= 0 && code < 7); }
+	public:
+		static char names[7][24]; // initialized outside CellGrid (right before the end of the file)
+		Topology(char code) : grid{nullptr}, id{code} { assert(code >= 0 && code < 7); }
+		Topology(const Topology& top) : grid{nullptr}, id{top.id} {}
+		void operator=(char code) {
+			assert(code >= 0 && code < 7);
+			id = code;
+			if (grid) {
+				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+				else if (grid->started) grid->primeEdge();
+			}
+		}
+		void operator=(const Topology& ebh) {
+			id = ebh.id;
+			if (grid) {
+				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+				else if (grid->started) grid->primeEdge();
+			}
+		}
+		bool operator==(const Topology& ebh) const { return id == ebh.id; }
+		bool operator!=(const Topology& ebh) const { return id != ebh.id; }
+		bool operator==(char code) const { return id == code; }
+		bool operator!=(char code) const { return id == code; }
+		char getCode() const { return id; }
+		const char* cstr() const { return names[id]; }
+		operator const char*() const { return cstr(); }
+		friend std::ostream& operator<<(std::ostream& out, const Topology& top) { return out << top.cstr(); }
+	};
 	i32 width, height;
-	CellGrid(i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
+	Rule rule;
+	static const Topology plane, torus, bottle, vbottle, hbottle, cross, sphere, pillow;
+	/* these are initialized outside of the class (right before the end of the file)
+	   with the values 0, 1, 2, 2, 3, 4, 5, respectively */
+	Topology edge;
+	Topology& topology{edge};
+	i32 gen;
+	CellGrid(i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
+	CellGrid(i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, rl, egbh}
+	CellGrid(i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{gn}, rule{this, std::move(rl), egbh}
+	CellGrid(i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, std::move(rl)}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, EdgeBhvr egbh = plane) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, gen{}, rule{this, 0u, egbh}
+	CellGrid(i32 wdt, i32 hgt, Topology ebh = plane) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{}, rule{this, 0u}
 		{ construct(wdt, hgt); }          // default edge behavior is now plane, not torus!
-	CellGrid(const CellGrid& grid, char* rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
+	CellGrid(const CellGrid& grid, const char* rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, char* rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, rl, egbh, grid.gen) {
+	CellGrid(const CellGrid& grid, const char* rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, char* rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
+	CellGrid(const CellGrid& grid, const char* rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, const Rule& rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
+	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, const Rule& rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, rl, egbh, grid.gen) {
+	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
+	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, Rule&& rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), egbh, gn) {
+	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, Rule&& rl, EdgeBhvr egbh) : CellGrid(grid.width, grid.height, std::move(rl), egbh, grid.gen) {
+	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh) : CellGrid(grid.width, grid.height, std::move(rl), ebh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid.width, grid.height, std::move(rl), grid.rule.ebh, grid.gen) {
+	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid.width, grid.height, std::move(rl), grid.edge, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, u32 rl, EdgeBhvr egbh, i32 gn) : CellGrid(grid.width, grid.height, rl, egbh, gn) {
+	CellGrid(const CellGrid& grid, u32 rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	// the constructor (CellGrid&, u32, EdgeBhvr) would be confused by the compiler with (CellGrid&, i32, i32) :(
-	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.width, grid.height, rl, grid.rule.ebh, grid.gen) {
+	CellGrid(const CellGrid& grid, u32 rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
 		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
 			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, char* rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
+		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
+			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
+	}
+	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, const char* rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		if (!(rule = rl)) throw "Invalid rule";
-		rule.ebh = egbh;
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, char* rl, EdgeBhvr egbh) : CellGrid(std::move(grid), rl, egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, char* rl) : CellGrid(std::move(grid), rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, const Rule& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, const char* rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, const char* rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, const Rule& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		rule = rl;
-		rule.ebh = egbh;
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, const Rule& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), rl, egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, const Rule& rl) : CellGrid(std::move(grid), rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, Rule&& rl, EdgeBhvr egbh, i32 gn) noexcept : rule{ this } {
+	CellGrid(CellGrid&& grid, const Rule& rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, const Rule& rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, Rule&& rl, Topology ebh, i32 gn) noexcept : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		rule = std::move(rl);
-		rule.ebh = egbh;
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, Rule&& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), std::move(rl), egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, Rule&& rl) : CellGrid(std::move(grid), std::move(rl), grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, u32 rl) : rule{ this } {
+	CellGrid(CellGrid&& grid, Rule&& rl, Topology ebh) : CellGrid(std::move(grid), std::move(rl), ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, Rule&& rl) : CellGrid(std::move(grid), std::move(rl), grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, u32 rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		rule = rl;
-		rule.ebh = grid.rule.ebh;
-		gen = grid.gen;
+		edge = ebh;
+		gen = gn;
 	}
-	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.rule.ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
+	CellGrid(CellGrid&& grid, u32 rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, u32 rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, std::move(rl), egbh, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, std::move(rl), ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, std::move(rl), egbh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.rule.ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh, i32 gn) : CellGrid(wdt, hgt, rl, egbh, gn) {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh) : CellGrid(grid, wdt, hgt, std::move(rl), ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
 		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
 			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
 	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh) : CellGrid(grid, wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
 		if (started) {
 			started = false;
-			if (!(rule = rl)) throw "Invalid rule";
+			if (!(rule = rl)) throw "Invalid rulestring";
 			started = true;
-		} else if (!(rule = rl)) throw "Invalid rule";
-		rule.ebh = egbh;
+		} else if (!(rule = rl)) throw "Invalid rulestring";
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -572,12 +692,12 @@ public:
 			rule = rl;
 			started = true;
 		} else rule = rl;
-		rule.ebh = egbh;
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -586,12 +706,12 @@ public:
 			rule = std::move(rl);
 			started = true;
 		} else rule = std::move(rl);
-		rule.ebh = egbh;
+		edge = ebh;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh, i32 gn) : rule{ this } {
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		width = wdt;
 		height = hgt;
@@ -602,48 +722,55 @@ public:
 		} else rule = rl;
 		gen = gn;
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh) : CellGrid(std::move(grid), wdt, hgt, rl, egbh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.rule.ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.rule.ebh, grid.gen) {}
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.edge, grid.gen) {}
+		// why does the debugger warn me about "use of a moved-from object"? grid.rule hasn't been moved yet...
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
-		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
-		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
-		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
-		{ dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
-		{ dat = cells; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, std::move(rl), ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
+		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt)
+		: CellGrid(wdt, hgt) { dat = cells; }
+	/*
+	// I need to somehow prevent <T> from matching int, bool**, bool**&&, CellGrid&, and CellGrid&&
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), egbh, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, egbh, gn)
+	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, char* rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
+	template<class T> CellGrid(T cells, char* rl, Topology ebh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, ebh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
+	template<class T> CellGrid(T cells, Rule& rl, Topology ebh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, ebh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule&& rl, EdgeBhvr egbh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), std::move(rl), egbh, gn)
+	template<class T> CellGrid(T cells, Rule&& rl, Topology ebh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), std::move(rl), ebh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 rl, EdgeBhvr egbh, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, egbh, gn)
+	template<class T> CellGrid(T cells, i32 rl, Topology ebh = plane, i32 gn = 0) : CellGrid((*cells).size(), cells.size(), rl, ebh, gn)
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-		// egbh cannot be optional: if egbh is optional, the compiler could confuse this with the (i32 width, i32 height) constructor.
 	template<class T> CellGrid(T cells) : CellGrid((*cells).size(), cells.size())
 		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+	*/
 	// am i crazy or do classes usually have this many constructors?
 	// is there a better way to do this??
 
@@ -660,6 +787,8 @@ public:
 		delete[] acr;
 		delete[] anx;
 		delete[] als;
+		delete[] dlf;
+		delete[] drg;
 		delete[] pRow;
 	}
 	CellGrid& operator=(CellGrid& grid) {
@@ -714,11 +843,8 @@ public:
 		height = grid.height;
 		return *this;
 	}
-	CellGrid& operator=(const bool* const* grid) { // make sure input grid has the same dimensions as CellGrid!!
-		if (w == width) { if (h != h)
-			assert(height > 0),
-			h = height; }
-		else weakResize();
+	CellGrid& operator=(const bool* const* grid) { // make sure input grid has the same dimensions as CellGrid!
+		if (width != w || height != h) resize();
 		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j)
 			dat[i][j] = grid[i][j],
 			act[i][j] = true;
@@ -727,15 +853,48 @@ public:
 	}
 	CellGrid& operator=(bool**&& grid) noexcept { // especially here!!! the error will not surface immediately
 		if (w == width) { if (h != h)
-			assert(height > 0),
+			assert(height > 0), // asserts don't count as exceptions right...?
 			h = height; }
-		else weakResize();
+		else {
+			assert(width > 0 && height > 0);
+			w = width;
+			h = height;
+			delete[] dst;
+			delete[] dpv;
+			delete[] dcr;
+			delete[] acr;
+			delete[] anx;
+			delete[] als;
+			delete[] dlf;
+			delete[] drg;
+			delete[] pRow;
+			dst = dpv = dcr = acr = anx = als = dlf = drg = nullptr;
+			pRow = nullptr;
+		}
 		if (grid == dat) return *this;
+		for (i32 i{}; i != h; ++i) delete[] dat[i];
 		delete[] dat;
 		dat = grid;
 		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) act[i][j] = true;
 		started = false;
 		return *this;
+	}
+	void shift(i32 shft) {
+		if (width != w || height != h) resize();
+		else if (started) primeEdge();
+		if (vsh) esh = shft % h; // C++'s modulo % operator treats the dividend as an absolute
+		else esh = shft % w;     //   value and then multiplies by the sign of the dividend
+	}
+	void shift(i32 shft, bool vshft) {
+		if (width != w || height != h) resize();
+		if (started) primeEdge();
+		if (vshft) {
+			esh = shft % h;
+			vshft = true;
+		} else {
+			esh = shft % w;
+			vshft = false;
+		}
 	}
 	const bool* const* data() {
 		if (width != w || height != h) resize();
@@ -773,13 +932,70 @@ public:
 		const bool* birth{ rule.birthArr() };
 		const bool* death{ rule.deathArr() };
 		const i32 wm1{ w - 1 }, hm1{ h - 1 };
-		auto edgeCount{ &CellGrid::torusCount }; // C++ is confusing
-		auto edgeSet{ flicker ? &CellGrid::torusSetFl : &CellGrid::torusSet };
+		//const auto edgeCount{ &CellGrid::torusCount };
+		i32 (CellGrid::*edgeCount)(i32, i32); // C++ is confusing
+		switch (edge.id) {
+		case 0:
+			edgeCount = &CellGrid::planeCount;
+			break;
+		case 1:
+			edgeCount = esh ? &CellGrid::shTorusCount : &CellGrid::torusCount;
+			break;
+		case 5:
+			edgeCount = esh ? &CellGrid::shSphereCount : &CellGrid::sphereCount;
+			break;
+		case 6:
+			edgeCount = esh ? &CellGrid::shPillowCount : &CellGrid::pillowCount;
+			break;
+		default:
+			edgeCount = esh ? &CellGrid::shCrossesCount : &CellGrid::crossesCount;
+			break;
+		}
+		//const auto edgeSet{ flicker ? &CellGrid::torusSetFl : &CellGrid::torusSet };
+		void (CellGrid::*edgeSet)(i32, i32, bool);
+		if (flicker) {
+			switch (edge.id) {
+			case 0:
+				edgeSet = &CellGrid::planeSetFl;
+				break;
+			case 1:
+				edgeSet = esh ? &CellGrid::shTorusSetFl : &CellGrid::torusSetFl;
+				break;
+			case 5:
+				edgeSet = esh ? &CellGrid::shSphereSetFl : &CellGrid::sphereSetFl;
+				break;
+			case 6:
+				edgeSet = esh ? &CellGrid::shPillowSetFl : &CellGrid::pillowSetFl;
+				break;
+			default:
+				edgeSet = esh ? &CellGrid::shCrossesSetFl : &CellGrid::crossesSetFl;
+				break;
+			}
+		}
+		else {
+			switch (edge.id) {
+			case 0:
+				edgeSet = &CellGrid::planeSet;
+				break;
+			case 1:
+				edgeSet = esh ? &CellGrid::shTorusSet : &CellGrid::torusSet;
+				break;
+			case 5:
+				edgeSet = esh ? &CellGrid::shSphereSet : &CellGrid::sphereSet;
+				break;
+			case 6:
+				edgeSet = esh ? &CellGrid::shPillowSet : &CellGrid::pillowSet;
+				break;
+			default:
+				edgeSet = esh ? &CellGrid::shCrossesSet : &CellGrid::crossesSet;
+				break;
+			}
+		}
 		if (!started) {
 			for (i32 i{}, j; i != h; ++i) {
 				bool* asp{ i ? act[i - 1] : act[hm1] },
 				    * asc{ act[i] },
-				    * asn{ i == hm1 ? act[i + 1] : *act };
+				    * asn{ i == hm1 ? *act : act[i + 1] };
 				for (j = 0;;) {
 					if (i && i != hm1 && j && j != -1) {
 						if (flicker) {
@@ -922,22 +1138,22 @@ public:
 		return *this;
 	}
 	CellGrid& operator++(int) { return operator++(); }
-	CellGrid& operator+=(int gens) {
-		for (int i{}; i != gens; ++i) operator++();
+	CellGrid& operator+=(i32 gens) {
+		for (i32 i{}; i != gens; ++i) operator++();
 		return *this;
 	}
-	CellGrid operator+(int gens) {
+	CellGrid operator+(i32 gens) {
 		CellGrid newGrid{*this};
-		for (int i{}; i != gens; ++i) ++newGrid;
+		for (i32 i{}; i != gens; ++i) ++newGrid;
 		return newGrid;
 	}
-	long count(bool state = true) const {
-		long result{};
+	i64 count(bool state = true) const {
+		i64 result{};
 		if (width < w || height < h) for (i32 i{}, j; i != height; ++i) for (j = 0; j != width; ++j)
 			{ if (dat[i][j]) result++; }
 		else for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) if (dat[i][j]) result++;
 		if (state) return result;
-		else return (long)width * (long)height - result;
+		else return (i64)width * (i64)height - result;
 	}
 	void resize(i32 wdt = 0, i32 hgt = 0, bool keepCells = true, bool center = false) {
 		if (wdt) width = wdt;
@@ -957,14 +1173,9 @@ public:
 			delete[] acr;
 			delete[] anx;
 			delete[] als;
-			dst = nullptr;
-			dpv = nullptr;
-			dcr = nullptr;
-			acr = nullptr;
-			anx = nullptr;
-			als = nullptr;
+			dst = dpv = dcr = acr = anx = als = nullptr;
 		}
-		#define clhf(num) ( num < 0 ? num / 2 : (num + 1) / 2 )
+		#define hfsb(a, b) ( a < b ? (a - b) / 2 : (a - b + 1) / 2 )
 		if (h == height) {
 			bool* rda, * rac;
 			for (i32 i{}, j; i != h; ++i) {
@@ -972,9 +1183,9 @@ public:
 					rda = new bool[width];
 					rac = new bool[width];
 					j = 0;
-					if (center) for (i32 hoff{ clhf((i32)w - (i32)width) }; j != w; ++j) rda[j] =
-						j + hoff >= 0 && j + hoff < w ? dat[i][j + hoff] : false;
-					else for (; j != w; ++j) rda[j] = dat[i][j];
+					if (center) for (i32 k{ hfsb((i32)w, (i32)width) }; j != width; ++j, ++k) rda[j] =
+						k >= 0 && k < w ? dat[i][k] : false;
+					else for (; j != width; ++j) rda[j] = j < w ? dat[i][j] : false;
 				} else rda = new bool[width]{},
 				       rac = new bool[width]{};
 				delete[] dat[i];
@@ -993,8 +1204,8 @@ public:
 				j = 0;
 				if (keepCells) {
 					if (center) {
-						for (i32 hoff{ clhf((i32)w - (i32)width) },
-						         ysrc{ (i32)i + clhf((i32)h - (i32)height) }; j != width; ++j)
+						for (i32 hoff{ hfsb((i32)w, (i32)width) },
+						         ysrc{ (i32)i + hfsb((i32)h, (i32)height) }; j != width; ++j)
 							if (ysrc >= 0 && ysrc < h && j + hoff >= 0 && j + hoff < w)
 								nda[i][j] = dat[ysrc][j + hoff],
 								nac[i][j] = act[ysrc][j + hoff];
@@ -1016,8 +1227,8 @@ public:
 					if (w < width) i = hoff;
 					if (h < height) {
 						for (; i - hoff != w && i != width; ++i) if (i >= 0)
-							(voff ? nac[voff-1][i] : nac[height-1][i]) = nac[voff][i]
-							  = nac[h-1 + voff][i] = nac[h + voff][i] = true;
+							(voff ? nac[voff-1][i] : nac[height-1][i]) = nac[voff][i] // buffer overrun warning?
+							  = nac[h-1 + voff][i] = nac[h + voff][i] = true;         // i don't understand how
 						i = voff;
 					}
 					else {
@@ -1031,15 +1242,15 @@ public:
 					else for (; i - voff != h && i != height; ++i) if (i >= 0)
 						nac[i][0] = nac[i][width-1] = true;
 					// fix these                vvv
-					nac[height-1][width-1] = true;
-					if (w < width) nac[height-1][w] = (h > height) ? true : nac[h][w] = true;
-					if (h < height) nac[h][width-1] = (w >  width) ? true : nac[h][w] = true;
+					//nac[height-1][width-1] = true;
+					//if (w < width) nac[height-1][w] = (h > height) ? true : nac[h][w] = true;
+					//if (h < height) nac[h][width-1] = (w >  width) ? true : nac[h][w] = true;
 				}
 				else {
-					if (h < height) for (; i != w; ++i)
+					if (h < height) for (; i != w && i != width; ++i)
 						nac[0][i] = nac[h-1][i] = nac[h][i] = nac[height-1][i] = true;
 					else for (; i !=  width; ++i) nac[0][i] = nac[height-1][i] = true;
-					if (w < width) for (i = 0; i != h; ++i)
+					if (w < width) for (i = 0; i != h && i != height; ++i)
 						nac[i][0] = nac[i][w-1] = nac[i][w] = nac[i][width-1] = true;
 					else for (i = 0; i != height; ++i) nac[i][0] = nac[i][width-1] = true;
 					nac[height-1][width-1] = true;
@@ -1051,6 +1262,9 @@ public:
 			delete[] act;
 			dat = nda;
 			act = nac;
+			delete[] dlf;
+			delete[] drg;
+			dlf = drg = nullptr;
 			w = width;
 			h = height;
 		}
@@ -1063,7 +1277,9 @@ public:
 	bool isValid() const { return dat; }
 	void print(bool pGen = false) {
 		if (width != w || height != h) resize();
-		if (!pRow) pRow = new char[w + 2];
+		bool longpr{};
+		if (!pRow) pRow = new uch[w + 2];
+		else if (*pRow == '\0') longpr = true;
 		if (pGen) std::cout << "Generation " << gen << '\n';
 		for (i32 i{}, j; i < h; i += 2) {
 			j = 0;
@@ -1074,16 +1290,18 @@ public:
 			pRow[w+1] = '\0';
 			std::cout << pRow;
 		}
-		*pRow = static_cast<unsigned char>(255);
+		if (longpr) *pRow = '\0';
+		else *pRow = (uch)255;
 	}
-	void printSafe(bool pGen = false, char ch1 = '\0', char ch2 = '\0') {
+	void printSafe(bool pGen = false, uch ch1 = '\0', uch ch2 = '\0') {
+		assert(ch1 != (uch)255 && ch2 != (uch)255);
 		if (width != w || height != h) resize();
 		if (ch1) { if (!ch2) ch2 = ch1; }
 		else ch1 = '[', ch2 = ']';
-		if (!pRow) pRow = new char[w * 2 + 2];
+		if (!pRow) pRow = new uch[w * 2 + 2];
 		else if (*pRow == 255) {
 			delete[] pRow;
-			pRow = new char[w * 2 + 2];
+			pRow = new uch[w * 2 + 2];
 		}
 		if (pGen) std::cout << "Generation " << gen << '\n';
 		for (i32 i{}, j; i < h; ++i) {
@@ -1095,14 +1313,39 @@ public:
 			pRow[w*2+1] = '\0';
 			std::cout << pRow;
 		}
+		*pRow = '\0';
 	}
-	friend std::ostream& operator<<(std::ostream& out, CellGrid grid) {
+	friend std::ostream& operator<<(std::ostream& out, CellGrid& grid) {
 		grid.print();
 		return out;
 	}
-	friend std::ostream& operator<<(std::ostream& out, Rule rule) {
-		out << rule.str();
-		return out;
-	}
+	// friend int main(); // for debugging
 };
+
+const CellGrid::Topology
+	CellGrid::plane{'\0'}, // int 0 is confused with C-style null pointer
+	CellGrid::torus{1},
+	CellGrid::bottle{2},
+	CellGrid::vbottle{2},
+	CellGrid::hbottle{3},
+	CellGrid::cross{4},
+	CellGrid::sphere{5},
+	CellGrid::pillow{6};
+char CellGrid::Topology::names[7][24] { "plane", "torus", "Klein bottle", "Klein bottle", "cross-surface", "sphere", "pillow" };
+// 24 chars is just enough space to fit "horizontal Klein bottle" if you want to change it to that
+
 #endif
+
+/*
+torus, +2 shift
+----+-----+---
+. o | . o | .
+ +  |  +  |  +
++---+-+---+-+-
+| . o | . o |
+|  +  |  +  |
++-+---+-+---+-
+o | . o | . o
+  |  +  |  +
+--+-----+-----
+*/
