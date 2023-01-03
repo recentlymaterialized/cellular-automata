@@ -2,6 +2,7 @@
 #define recentlymaterialized_CellGrid
 #include <iostream>
 #include <cstdint>
+#include <cstring>
 #include <cassert>
 
 // DISCLAIMER
@@ -72,25 +73,25 @@ myGrid.rule = "..." // Sets rule to rulestring "...", returns true if successful
 
 // You can['t] change the topology, or "edge behavior", of the grid: whether cells at one
     edge of the grid wrap around to meet cells on another edge.
-// There are currently 5 options for edge behavior (of type CellGrid::Topology):
-   Identifier     | Value |    Description
-CellGrid::plane   |   0   |  No edge joining. Cells outside the grid are considered OFF.
-CellGrid::torus   |   1   |  Cells on the left/right edges are adjacent to the cell on the opposite edge on the same
--                 |       |    row. Cells on the top/bottom edges are adjacent to the opposite cell on their column.
-CellGrid::bottle, |   2   |  Similar to torus, but cells on the top/bottom edges are adjacent to the opposite cell
-CellGrid::vbottle |       |    on the opposite column. CellGrid::bottle is an alias for CellGrid::vbottle.
-CellGrid::hbottle |   3   |  A horizontal version of the Klein bottle. (vbottle is usually faster)
-CellGrid::cross   |   4   |  Cross-surface: cells on the L/R and T/B edges meet on the opposite row/column.
-CellGrid::sphere  |   5   |  Similar to torus, but adjacent edges meet, rather than opposite edges. (width = height)
-CellGrid::pillow  |   6   |  Similar to plane, but cells outside the grid take on the state of the nearest valid cell.
+// There are currently 7 options for edge behavior (of type CellGrid::Topology):
+   Identifier     | Code |    Description
+CellGrid::plane   |  0   |  No edge joining. Cells outside the grid are considered OFF.
+CellGrid::torus   |  1   |  Cells on the left/right edges are adjacent to the cell on the opposite edge on the same
+-                 |      |    row. Cells on the top/bottom edges are adjacent to the opposite cell on their column.
+CellGrid::bottle, |  2   |  Similar to torus, but cells on the top/bottom edges are adjacent to the opposite cell
+CellGrid::vbottle |      |    on the opposite column. CellGrid::bottle is an alias for CellGrid::vbottle.
+CellGrid::hbottle |  3   |  A horizontal version of the Klein bottle. (vbottle is usually faster)
+CellGrid::cross   |  4   |  Cross-surface: cells on the L/R and T/B edges meet on the opposite row/column.
+CellGrid::sphere  |  5   |  Similar to torus, but adjacent edges meet, rather than opposite edges. (width = height)
 The edge topology may be included in the grid's constructor, or modified by setting grid.edge or grid.topology.
 Additionally, joined edges may be "shifted" relative to each other (see diagram at bottom of file) using the
 .shift() member function. This has no effect on planes.
 
 Examples:
 CellGrid torusGrid(50, 50, "", CellGrid::torus) // rule defaults to Life
-CellGrid sphereGrid(torusGrid, "", 5) // 5 is converted to its corresponding Topology enumeration, CellGrid::sphere
+CellGrid sphereGrid(torusGrid, "", CellGrid::sphere) // a copy of torusGrid but with sphere topology
 sphereGrid.edge = CellGrid::cross // sphereGrid is now a cross-surface
+sphereGrid.edge = CellGrid::Topology{5} // sphereGrid is now a sphere, created from the code 5
 torusGrid.shift(2) // the top & bottom edges of torusGrid are now shifted 2 cells relative to each other
                    // (imagine a rectangular tiling of CellGrids, where each next row is shifted 2 cells to the right)
 torusGrid.shift(-4) // torusGrid is now shifted horizontally 4 cells in the opposite direction
@@ -190,9 +191,7 @@ protected:
 	i32 shCrossesCount(i32 x, i32 y) { return shTorusCount(x, y); }
 	i32 sphereCount(i32 x, i32 y) { return torusCount(x, y); }
 	i32 shSphereCount(i32 x, i32 y) { return shTorusCount(x, y); } // shift can work with spheres and crosses,
-	i32 pillowCount(i32 x, i32 y) { return planeCount(x, y); }     //   but it's messy
-	i32 shPillowCount(i32 x, i32 y) { return planeCount(x, y); }
-	void planeSet(i32 x, i32 y, bool state) {
+	void planeSet(i32 x, i32 y, bool state) {                      //   but it's messy
 		dat[y][x] = state;
 		if (y) {if (y == h - 1) {
 			bool* anp{ act[y - 1] }; // does this make it faster or slower?
@@ -310,14 +309,41 @@ protected:
 	void sphereSetFl(i32 x, i32 y, bool state) { torusSetFl(x, y, state); }
 	void shSphereSet(i32 x, i32 y, bool state) { shTorusSet(x, y, state); }
 	void shSphereSetFl(i32 x, i32 y, bool state) { shTorusSetFl(x, y, state); }
-	void pillowSet(i32 x, i32 y, bool state) { planeSet(x, y, state); }
-	void pillowSetFl(i32 x, i32 y, bool state) { planeSetFl(x, y, state); }
-	void shPillowSet(i32 x, i32 y, bool state) { planeSet(x, y, state); }
-	void shPillowSetFl(i32 x, i32 y, bool state) { planeSetFl(x, y, state); }
 	void primeEdge() {
 		for (i32 i{}; i != w; ++i) act[0][i] = act[h-1][i] = true;
 		for (i32 i{}; i != h; ++i) act[i][0] = act[i][w-1] = true;
 	}
+	void construct(i32 wdt, i32 hgt) {
+		assert(wdt > 0 && wdt < 65536l && hgt > 0 && hgt < 65536l
+			&& (edge != sphere || wdt == hgt)); // if topology is sphere, width must equal height
+		dat = new bool*[hgt];
+		act = new bool*[hgt];
+		for (i32 i{}, j; i != hgt; ++i) {
+			dat[i] = new bool[wdt];
+			act[i] = new bool[wdt];
+			for (j = 0; j != wdt; ++j) dat[i][j] = false;
+		}
+	}
+	void moveConstruct(CellGrid&& grid) {
+		dat = grid.dat;
+		act = grid.act;
+		dst = grid.dst;
+		dpv = grid.dpv;
+		dcr = grid.dcr;
+		acr = grid.acr;
+		anx = grid.anx;
+		dlf = grid.dlf;
+		drg = grid.drg;
+		als = grid.als;
+		pRow = grid.pRow;
+		grid.dat = grid.act = nullptr;
+		grid.dst = grid.dpv = grid.dcr =
+		grid.acr = grid.anx = grid.als =
+		grid.dlf = grid.drg = nullptr;
+		grid.pRow = nullptr;
+		started = grid.started;
+	}
+public:
 	class Rule {
 	protected:
 		friend CellGrid;
@@ -328,7 +354,7 @@ protected:
 	public:
 		Rule(CellGrid* gd) noexcept : grid{ gd } {} // Use sparingly
 		Rule(CellGrid* gd, u32 cd) noexcept
-		: grid{ gd }, code{ cd } {
+			: grid{ gd }, code{ cd } {
 			if (!code) code = defaultRule; // initialization with 0 defaults to Life; this is not the case for assignment
 			if (code == -1) code = 131072; // rule 0 "B/S" stored as 2^17
 			u32 pos{1};
@@ -337,12 +363,12 @@ protected:
 			for (int i{0}; i != 9; ++i, pos <<= 1) dArr[i] = ~code & pos;
 		}
 		Rule(CellGrid* gd, const Rule& rule)
-		: grid{ gd }, code{ rule.code } {
+			: grid{ gd }, code{ rule.code } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i];
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i];
 		}
 		Rule(CellGrid* gd, Rule&& rule) noexcept
-		: grid{ gd }, code{ rule.code } {
+			: grid{ gd }, code{ rule.code } {
 			for (int i{}; i != 9; ++i) bArr[i] = rule.bArr[i]; // these must be copied because they
 			for (int i{}; i != 9; ++i) dArr[i] = rule.dArr[i]; //  are not dynamically allocated :(
 			if (rule.srep) {	                          //  (more dynamic allocation will be used
@@ -351,7 +377,7 @@ protected:
 			}
 		}
 		Rule(CellGrid* gd, const char* rulestr)
-		: grid{ gd } {
+			: grid{ gd } {
 			if (!(operator=(rulestr))) throw "Invalid rulestring";
 		}
 		virtual ~Rule() { delete[] srep; }
@@ -474,36 +500,10 @@ protected:
 		operator u32() const { return code; }
 		bool operator==(u32 code2) const { return code == code2; }
 		bool operator!=(u32 code2) const { return code != code2; }
-		friend std::ostream& operator<<(std::ostream& out, Rule& rule) { return out << rule.cstr(); }
+		friend void swap(CellGrid&, CellGrid&);
+		friend void swap(Rule&, Rule&);
+		friend std::istream& operator>>(std::istream&, Rule&);
 	};
-	void construct(i32 wdt, i32 hgt) {
-		assert(wdt > 0 && wdt < 65536l && hgt > 0 && hgt < 65536l
-			&& (edge != sphere || wdt == hgt)); // if topology is sphere, width must equal height
-		dat = new bool*[hgt];
-		act = new bool*[hgt];
-		for (i32 i{}, j; i != hgt; ++i) {
-			dat[i] = new bool[wdt];
-			act[i] = new bool[wdt];
-			for (j = 0; j != wdt; ++j) dat[i][j] = false;
-		}
-	}
-	void moveConstruct(CellGrid&& grid) {
-		dat = grid.dat;
-		act = grid.act;
-		dst = grid.dst;
-		dpv = grid.dpv;
-		dcr = grid.dcr;
-		acr = grid.acr;
-		anx = grid.anx;
-		als = grid.als;
-		pRow = grid.pRow;
-		grid.dat = grid.act = nullptr;
-		grid.dst = grid.dpv = grid.dcr =
-		grid.acr = grid.anx = grid.als = nullptr;
-		grid.pRow = nullptr;
-		started = grid.started;
-	}
-public:
 	class Topology { // This is a class instead of an enumeration to resolve ambiguities in the CellGrid constructors
 	protected:
 		friend CellGrid;
@@ -511,13 +511,24 @@ public:
 		char id;
 		Topology(CellGrid* parent) : grid{parent} {} // Use sparingly
 		Topology(CellGrid* parent, const Topology& top) : grid{parent}, id{top.id} {}
-		Topology(CellGrid* parent, char code) : grid{parent}, id{code} { assert(code >= 0 && code < 7); }
+		Topology(CellGrid* parent, char code) : grid{parent}, id{code >= '0' ? code - '0' : code}
+			{ assert(id >= 0 && id < 7); }
+		Topology(CellGrid* parent, int code) : grid{parent}, id{(char)code} { assert(code >= 0 && code < 7); }
 	public:
-		static char names[7][24]; // initialized outside CellGrid (right before the end of the file)
+		static char names[6][24]; // initialized outside CellGrid (right before the end of the file)
 		Topology(char code) : grid{nullptr}, id{code} { assert(code >= 0 && code < 7); }
 		Topology(const Topology& top) : grid{nullptr}, id{top.id} {}
 		void operator=(char code) {
-			assert(code >= 0 && code < 7);
+			if (code >= '0') code -= '0';
+			assert(code >= 0 && code < 6);
+			id = code;
+			if (grid) {
+				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
+				else if (grid->started) grid->primeEdge();
+			}
+		}
+		void operator=(int code) {
+			assert(code >= 0 && code < 6);
 			id = code;
 			if (grid) {
 				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
@@ -533,16 +544,20 @@ public:
 		}
 		bool operator==(const Topology& ebh) const { return id == ebh.id; }
 		bool operator!=(const Topology& ebh) const { return id != ebh.id; }
-		bool operator==(char code) const { return id == code; }
-		bool operator!=(char code) const { return id == code; }
+		bool operator==(char code) const { return id == code || id - '0' == code; }
+		bool operator!=(char code) const { return id != code && id - '0' != code; }
+		bool operator==(int code) const { return (int)id == code; }
+		bool operator!=(int code) const { return (int)id != code; }
 		char getCode() const { return id; }
 		const char* cstr() const { return names[id]; }
 		operator const char*() const { return cstr(); }
-		friend std::ostream& operator<<(std::ostream& out, const Topology& top) { return out << top.cstr(); }
+		friend void swap(CellGrid&, CellGrid&);
+		friend void swap(Topology&, Topology&);
+		friend std::istream& operator>>(std::istream&, Topology&);
 	};
 	i32 width, height;
 	Rule rule;
-	static const Topology plane, torus, bottle, vbottle, hbottle, cross, sphere, pillow;
+	static const Topology plane, torus, bottle, vbottle, hbottle, cross, sphere;
 	/* these are initialized outside of the class (right before the end of the file)
 	   with the values 0, 1, 2, 2, 3, 4, 5, respectively */
 	Topology edge;
@@ -829,10 +844,13 @@ public:
 		acr = grid.acr;
 		anx = grid.anx;
 		als = grid.als;
+		dlf = grid.dlf;
+		drg = grid.drg;
 		pRow = grid.pRow;
 		grid.dat = grid.act = nullptr;
 		grid.dst = grid.dpv = grid.dcr =
-		grid.acr = grid.anx = grid.als = nullptr;
+		grid.acr = grid.anx = grid.als =
+		grid.dlf = grid.drg = nullptr;
 		started = false;
 		rule = std::move(grid.rule);
 		started = grid.started;
@@ -852,10 +870,15 @@ public:
 		return *this;
 	}
 	CellGrid& operator=(bool**&& grid) noexcept { // especially here!!! the error will not surface immediately
-		if (w == width) { if (h != h)
-			assert(height > 0), // asserts don't count as exceptions right...?
-			h = height; }
-		else {
+		if (w == width) {
+			if (h != h) {
+				assert(height > 0); // asserts don't count as exceptions right...?
+				h = height;
+				delete[] dlf;
+				delete[] drg;
+				dlf = drg = nullptr;
+			}
+		} else {
 			assert(width > 0 && height > 0);
 			w = width;
 			h = height;
@@ -865,11 +888,14 @@ public:
 			delete[] acr;
 			delete[] anx;
 			delete[] als;
-			delete[] dlf;
-			delete[] drg;
 			delete[] pRow;
-			dst = dpv = dcr = acr = anx = als = dlf = drg = nullptr;
+			dst = dpv = dcr = acr = anx = als = nullptr;
 			pRow = nullptr;
+			if (h != h) {
+				delete[] dlf;
+				delete[] drg;
+				dlf = drg = nullptr;
+			}
 		}
 		if (grid == dat) return *this;
 		for (i32 i{}; i != h; ++i) delete[] dat[i];
@@ -900,7 +926,7 @@ public:
 		if (width != w || height != h) resize();
 		return dat;
 	}
-	const bool* const* active() { return act; } // for debugging | warning: act may be uninitialized
+	const bool* const* active() const { return act; } // for debugging | warning: act may be uninitialized
 	bool operator()(i32 x, i32 y) const {
 		if (x < 0 || x >= w || y < 0 || w >= h) return false;
 		return dat[y][x];
@@ -932,7 +958,6 @@ public:
 		const bool* birth{ rule.birthArr() };
 		const bool* death{ rule.deathArr() };
 		const i32 wm1{ w - 1 }, hm1{ h - 1 };
-		//const auto edgeCount{ &CellGrid::torusCount };
 		i32 (CellGrid::*edgeCount)(i32, i32); // C++ is confusing
 		switch (edge.id) {
 		case 0:
@@ -944,14 +969,10 @@ public:
 		case 5:
 			edgeCount = esh ? &CellGrid::shSphereCount : &CellGrid::sphereCount;
 			break;
-		case 6:
-			edgeCount = esh ? &CellGrid::shPillowCount : &CellGrid::pillowCount;
-			break;
 		default:
 			edgeCount = esh ? &CellGrid::shCrossesCount : &CellGrid::crossesCount;
 			break;
 		}
-		//const auto edgeSet{ flicker ? &CellGrid::torusSetFl : &CellGrid::torusSet };
 		void (CellGrid::*edgeSet)(i32, i32, bool);
 		if (flicker) {
 			switch (edge.id) {
@@ -963,9 +984,6 @@ public:
 				break;
 			case 5:
 				edgeSet = esh ? &CellGrid::shSphereSetFl : &CellGrid::sphereSetFl;
-				break;
-			case 6:
-				edgeSet = esh ? &CellGrid::shPillowSetFl : &CellGrid::pillowSetFl;
 				break;
 			default:
 				edgeSet = esh ? &CellGrid::shCrossesSetFl : &CellGrid::crossesSetFl;
@@ -983,9 +1001,6 @@ public:
 			case 5:
 				edgeSet = esh ? &CellGrid::shSphereSet : &CellGrid::sphereSet;
 				break;
-			case 6:
-				edgeSet = esh ? &CellGrid::shPillowSet : &CellGrid::pillowSet;
-				break;
 			default:
 				edgeSet = esh ? &CellGrid::shCrossesSet : &CellGrid::crossesSet;
 				break;
@@ -998,7 +1013,7 @@ public:
 				    * asn{ i == hm1 ? *act : act[i + 1] };
 				for (j = 0;;) {
 					if (i && i != hm1 && j && j != -1) {
-						if (flicker) {
+						//if (flicker) {
 							if (j != wm1 && j != w && dat[i][j])
 								asp[j-1] = asp[j] = asp[j+1] =
 								asc[j-1] = asc[j] = asc[j+1] =
@@ -1013,7 +1028,7 @@ public:
 								asn[j-1] = asn[j] = asn[j+1] = true;
 							j += 3;
 							if (j == w + 1) j = -1;
-						}
+						/*}
 						else {
 							if (dat[i][j])
 								asp[j-1] = asp[j] = asp[j+1] =
@@ -1021,7 +1036,7 @@ public:
 								asn[j-1] = asn[j] = asn[j+1] = true;
 							++j;
 							if (j == wm1) j = -1;
-						}
+						}*/
 					}
 					else {
 						if (j == -1) j = wm1;
@@ -1315,12 +1330,103 @@ public:
 		}
 		*pRow = '\0';
 	}
-	friend std::ostream& operator<<(std::ostream& out, CellGrid& grid) {
-		grid.print();
-		return out;
-	}
+	friend void swap(CellGrid&, CellGrid&);
 	// friend int main(); // for debugging
 };
+
+void swap(CellGrid& grid, CellGrid& grid2) {
+	bool** dat{grid.dat}, ** act{grid.act},
+		 * dst{grid.dst},  * dpv{grid.dpv}, * dcr{grid.dcr},
+	     * acr{grid.acr},  * anx{grid.anx}, * als{grid.als},
+	     * dlf{grid.dlf},  * drg{grid.drg},
+	    started{grid.started};
+	auto* pRow{grid.pRow};
+	auto rule{grid.rule.code};
+	char* rstr{grid.rule.srep},
+	    tpid{grid.edge.id};
+	grid.dat = grid2.dat;
+	grid.act = grid2.act;
+	grid.dst = grid2.dst;
+	grid.dpv = grid2.dpv;
+	grid.dcr = grid2.dcr;
+	grid.acr = grid2.acr;
+	grid.anx = grid2.anx;
+	grid.als = grid2.als;
+	grid.dlf = grid2.dlf;
+	grid.drg = grid2.drg;
+	grid.pRow = grid2.pRow;
+	grid.started = grid2.started;
+	grid.rule.code = grid2.rule.code;
+	grid.rule.srep = grid2.rule.srep;
+	grid.edge.id = grid2.edge.id;
+	grid2.dat = dat;
+	grid2.act = act;
+	grid2.dst = dst;
+	grid2.dpv = dpv;
+	grid2.dcr = dcr;
+	grid2.acr = acr;
+	grid2.anx = anx;
+	grid2.als = als;
+	grid2.dlf = dlf;
+	grid2.drg = drg;
+	grid2.pRow = pRow;
+	grid2.started = started;
+	grid2.rule.code = rule;
+	grid2.rule.srep = rstr;
+	grid2.edge.id = tpid;
+}
+void swap(CellGrid::Rule& rule, CellGrid::Rule& rule2) {
+	auto code{rule.code};
+	char* srep{rule.srep};
+	rule.code = rule2.code;
+	rule.srep = rule2.srep;
+	rule2.code = code;
+	rule2.srep = srep;
+	std::swap(rule.bArr, rule2.bArr);
+	std::swap(rule.dArr, rule2.dArr);
+}
+void swap(CellGrid::Topology& top, CellGrid::Topology& top2) {
+	char id{top.id};
+	top.id = top2.id;
+	top2.id = id;
+}
+std::ostream& operator<<(std::ostream& out, CellGrid& grid) {
+	grid.print();
+	return out;
+}
+std::istream& operator>>(std::istream& in, CellGrid::Rule& rule) {
+	// Warning: This function currently always extracts 20 characters, even if the rulestring ends before then
+	in.width(21);
+	char input[21];
+	in >> input;
+	rule = input;
+	in.width(0);
+	return in;
+}
+std::ostream& operator<<(std::ostream& out, CellGrid::Rule& rule) { return out << rule.cstr(); }
+std::istream& operator>>(std::istream& in, CellGrid::Topology& top) {
+	// Warning: This function currently always extracts 23 characters if the first character is not a number 0-5
+	char inCh;
+	in >> inCh;
+	switch (inCh) {
+	case '0': case '1': case '2': case '3': case '4': case '5':
+		top = CellGrid::Topology{ inCh };
+		break;
+	default:
+		in.width(23);
+		char input[24];
+		*input = inCh;
+		in.getline(input + 1, 23);
+		// istream::operator>> doesn't work with char*, you have to use getline. thanks ChatGPT!!
+		for (int i{}; i != 5; ++i) if (strcmp(input, CellGrid::Topology::names[i])) {
+			top = i;
+			break;
+		}
+		in.width(0);
+	}
+	return in;
+}
+std::ostream& operator<<(std::ostream& out, const CellGrid::Topology& top) { return out << top.cstr(); }
 
 const CellGrid::Topology
 	CellGrid::plane{'\0'}, // int 0 is confused with C-style null pointer
@@ -1329,10 +1435,10 @@ const CellGrid::Topology
 	CellGrid::vbottle{2},
 	CellGrid::hbottle{3},
 	CellGrid::cross{4},
-	CellGrid::sphere{5},
-	CellGrid::pillow{6};
-char CellGrid::Topology::names[7][24] { "plane", "torus", "Klein bottle", "Klein bottle", "cross-surface", "sphere", "pillow" };
-// 24 chars is just enough space to fit "horizontal Klein bottle" if you want to change it to that
+	CellGrid::sphere{5};
+char CellGrid::Topology::names[6][24]
+	{ "plane", "torus", "Klein bottle", "Klein bottle", "cross-surface", "sphere" };
+// 24 chars is just enough space to fit "horizontal Klein bottle" if you want to change the fourth one to that
 
 #endif
 
