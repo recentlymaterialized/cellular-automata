@@ -1,6 +1,7 @@
 #ifndef recentlymaterialized_CellGrid
 #define recentlymaterialized_CellGrid
 #include <iostream>
+#include <stdexcept>
 #include <cstdint>
 #include <cstring>
 #include <cassert>
@@ -69,7 +70,8 @@ myGrid.rule.deathArr() // Returns array of 9 const bools for each possible numbe
 (unsigned long)(myGrid.rule) // Converts to a 17-bit integer of B/S behavior (Life = 3076)
 (char*)(myGrid.rule) OR myGrid.rule.cstr() // Returns a human-readable C-style string ("B3/S23")
                                            (allocated & created on first run; dies when rule changes or dies)
-myGrid.rule = "..." // Sets rule to rulestring "...", returns true if successful, false if rulestring is invalid
+myGrid.readstr("...") // Sets rule to rulestring "...", returns true if successful, false if rulestring is invalid
+myGrid.rule = "..." // Sets rule to rulestring "...", throws std::invalid_argument if rulestring is invalid
 
 // You can change the topology, or "edge behavior", of the grid: whether cells at one
     edge of the grid wrap around to meet cells on another edge.
@@ -352,7 +354,8 @@ public:
 		Rule(CellGrid* gd) noexcept : grid{ gd } {} // Use sparingly
 		Rule(CellGrid* gd, u32 cd) noexcept
 		: grid{ gd }, code{ cd } {
-			if (!code) code = defaultRule; // initialization with 0 defaults to Life; this is not the case for assignment
+			if (!code) code = defaultRule; // initialization with 0 defaults to Life
+			                               // (this is not the case for assignment)
 			if (code == -1) code = 131072; // rule 0 "B/S" stored as 2^17
 			u32 pos{1};
 			bArr[0] = false;
@@ -373,11 +376,12 @@ public:
 				rule.srep = nullptr;
 			}
 		}
-		Rule(CellGrid* gd, const char* rulestr)
-		: grid{ gd } {
-			if (!(operator=(rulestr))) throw "Invalid rulestring";
-		}
+		Rule(CellGrid* gd, const char* rulestr)	: grid{ gd } { operator=(rulestr); }
 	public:
+		explicit Rule(u32 cd) noexcept : Rule{ nullptr, cd } {}
+		Rule(const Rule& rule) noexcept : Rule{ nullptr, rule } {}
+		Rule(Rule&& rule) noexcept : Rule{ nullptr, std::move(rule) } {}
+		explicit Rule(const char* rulestr) : grid{ nullptr } { operator=(rulestr); }
 		virtual ~Rule() { delete[] srep; }
 		u32 operator=(u32 cd) noexcept {
 			if (!cd) cd = 131072;
@@ -416,9 +420,9 @@ public:
 			}
 			return *this;
 		}
-		bool operator=(const char* string) {
+		bool readstr(const char* string) {
 			if (string == nullptr) {
-				operator=(defaultRule); // Life
+				operator=(defaultRule);
 				return true;
 			}
 			if (*string != 'b' && *string != 'B') return false;
@@ -466,9 +470,13 @@ public:
 				}
 			return false;
 		}
-		bool operator==(u32 cd) { return code == cd; }
-		bool operator==(Rule& rl) { return code == rl.code; }
-		bool operator==(char* string) { return code == Rule{ nullptr, string }.code; }
+		bool operator=(const char* string) { if (!readstr(string)) throw std::invalid_argument{"Invalid rulestring"}; }
+		bool operator==(u32 cd) const { return code == cd; }
+		bool operator==(Rule& rl) const { return code == rl.code; }
+		bool operator==(char* string) const { return code == Rule{nullptr, string}.code; }
+		bool operator!=(u32 cd) const { return code != cd; }
+		bool operator!=(Rule& rl) const { return code != rl.code; }
+		bool operator!=(char* string) const { return code != Rule{nullptr, string}.code; }
 		bool b(int i) const { return bArr[i]; }
 		bool s(int i) const { return !dArr[i]; }
 		bool d(int i) const { return dArr[i]; }
@@ -497,8 +505,6 @@ public:
 		}
 		operator const char*() const { return cstr(); }
 		operator u32() const { return code; }
-		bool operator==(u32 code2) const { return code == code2; }
-		bool operator!=(u32 code2) const { return code != code2; }
 		friend void swap(CellGrid&, CellGrid&);
 		friend void swap(Rule&, Rule&);
 		friend std::istream& operator>>(std::istream&, Rule&);
@@ -627,7 +633,7 @@ public:
 	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, const char* rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
-		if (!(rule = rl)) throw "Invalid rule";
+		rule = rl;
 		edge = ebh;
 		gen = gn;
 	}
@@ -689,9 +695,9 @@ public:
 		height = hgt;
 		if (started) {
 			started = false;
-			if (!(rule = rl)) throw "Invalid rulestring";
+			rule = rl;
 			started = true;
-		} else if (!(rule = rl)) throw "Invalid rulestring";
+		} else rule = rl;
 		edge = ebh;
 		gen = gn;
 	}
@@ -1393,11 +1399,12 @@ std::ostream& operator<<(std::ostream& out, const CellGrid& grid) {
 }
 std::istream& operator>>(std::istream& in, CellGrid::Rule& rule) {
 	// Warning: This function currently always extracts 20 characters, even if the rulestring ends before then
+	auto inw{ in.width() };
 	in.width(21);
 	char input[21];
 	in >> input;
-	rule = input;
-	in.width(0);
+	if (!rule.readstr(input)) in.setstate(in.failbit);
+	in.width(inw);
 	return in;
 }
 std::ostream& operator<<(std::ostream& out, const CellGrid::Rule& rule) { return out << rule.cstr(); }
@@ -1414,8 +1421,12 @@ std::istream& operator>>(std::istream& in, CellGrid::Topology& top) {
 		*input = inCh;
 		in.getline(input + 1, 24);
 		// istream::operator>> doesn't work with char*, you have to use getline. thanks ChatGPT!!
-		for (int i{}; i != 5; ++i) if (strcmp(input, CellGrid::Topology::names[i])) {
+		for (int i{};;) if (strcmp(input, CellGrid::Topology::names[i])) {
 			top = i;
+			break;
+		}
+		else if (++i == 6) {
+			in.setstate(in.failbit);
 			break;
 		}
 	}
