@@ -5,9 +5,11 @@
 #include <cstdint>
 #include <cstring>
 #include <cassert>
+#include <string>
 
 // DISCLAIMER
-// i am a novice at c++. this was written to help me learn, not to be useful to anyone. my past programming experience is JavaScript on an iPhone; because of this, everything from variable names to formatting is horrendously minimized. i truly apologize.
+// i am a novice at c++. do not actually use this.
+
 
 /***Usage***
 > Instances of this class hold a grid of cells and can
@@ -15,11 +17,12 @@
 > C++20-compliant compiler required
 > Freely extensible: no private members
 
-Constructors:
-CellGrid(width, height, rule? = Life, edgeBehavior? = plane, generation? = 0)
+// Constructors:
+CellGrid(width, height, rule? = Life, edgeBehavior? = CellGrid::plane, generation? = 0)
 CellGrid(initialGrid, width, height, rule?, edgeBehavior?, generation?)
 CellGrid(initialGrid, rule?, edgeBehavior?, generation?)
-// some constructors are not available due to conflicts. most of the constructors currently have issues that i will try to fix
+// some constructors are not available due to conflicts.
+   most of the constructors currently have issues that i will try to fix
 
 CellGrid myGrid(1024, 512, "B3/S23"); // New empty 1024x512 Life grid
 bool array2d[1024][96];
@@ -29,8 +32,7 @@ CellGrid copyGrid(myGrid, '', 0, 12); // Makes a copy of myGrid with generation=
                                     .size() member function may alternatively
                                      be used as initialGrid here) -- currently not working because i
                                                                      have no idea how templates work
-.
-CellGrid member functions:
+// CellGrid member functions:
 
 myGrid(30, 20) // Gets value of cell at x:30, y:20
 myGrid(30, 20, 1) // Sets cell at x:30, y:20 to ON
@@ -39,20 +41,22 @@ myGrid( 8, 80, 0) // Sets cell at x:8, y:80 to OFF
 myGrid++; // Advances grid one generation (may be prefix or postfix)
 myGrid += 16; // Advances 16 generations
 
-myGrid.width = 25;      // Width, height, generation, and
-myGrid.height = 800;       rule may be changed freely as
-myGrid.gen = 4001;         desired (note: B0 not allowed)
-myGrid.rule = "B36/S23";
-myGrid.rule = copyGrid.rule = 0b00000110000100100l; // bits 0-7 are birth conditions for 1-8 neighbors;
-                                                      bits 8-16 are survival conditions for 0-8 neighbors
+myGrid.gen = 4001;           // Generation, edge behavior, and
+myGrid.edge = CellGrid::torus;  rule may be changed freely as
+myGrid.rule = "B36/S23";        desired (note: B0 not allowed)
+myGrid.rule = copyGrid.rule = 0b00000110000100100i32; // bits 0-7 are birth conditions for 1-8 neighbors;
+                                                     bits 8-16 are survival conditions for 0-8 neighbors
+myGrid.width() || myGrid.height() // The dimensions of the grid are accessible as signed 32-bit integers
+myGrid.resize(512, 1024) // The grid is resizable, with options to center the ON cells or clear them
+myGrid.resize(512, 1024, false) // Clears the grid before resizing
+myGrid.resize(512, 1024, true, true) // Centers the grid after resizing
+// Warning: The resize function currently has multiple issues and should not be used
 
-myGrid.count()      // Returns the number of ON  cells in grid
-myGrid.count(false) // Returns the number of OFF cells in grid
-myGrid.resize(width, height, keepCells = true) // resizes grid, clearing cells if keepCells is false
-                                                (this can also be done by setting .width and .height)
+myGrid.count()      // Returns the number of ON  cells in the grid
+myGrid.count(false) // Returns the number of OFF cells in the grid
 myGrid.data() // Returns const bool* const* access to the internal grid (array of rows of bools) [deleted on resize]
 
-myGrid.print()     // Prints grid to the console via std::ostream
+myGrid.print()     // Prints grid to the console via std::cout
 myGrid.print(true) // Prints grid and generation number
   (The grid is printed using char values 220, 223, 219, and space to display two cells per character)
 myGrid.printSafe(false, '#') // Prints grid without special characters (4x larger: two characters per cell)
@@ -61,15 +65,18 @@ myGrid = std::move(oldGrid); // move semantics are allowed, but the rvalue CellG
                                 (oldGrid) is left in an unusable state
 oldGrid.isValid() // returns false if contents have been moved away, otherwise true
 
-CellGrid::Rule member functions:
+// CellGrid::Rule member functions:
 myGrid.rule.b(n) // Returns true if an OFF cell becomes ON with n neighbors (birth)
 myGrid.rule.s(n) // Returns true if an ON cell stays ON with n neighbors (survival)
 myGrid.rule.d(n) // Returns true if an ON cell becomes OFF with n neighbors (death)
 myGrid.rule.birthArr(),
 myGrid.rule.deathArr() // Returns array of 9 const bools for each possible number of neighbors (0-8)
 (unsigned long)(myGrid.rule) // Converts to a 17-bit integer of B/S behavior (Life = 3076)
-(char*)(myGrid.rule) OR myGrid.rule.cstr() // Returns a human-readable C-style string ("B3/S23")
+myGrid.rule.cstr() or (const char*)(myGrid.rule) // Returns a human-readable C-style string ("B3/S23")
                                            (allocated & created on first run; dies when rule changes or dies)
+myGrid.rule.str() or (std::string)(myGrid.rule) // Creates a human-readable std::string ("B3/S23")
+myGrid.rule.strv() or (std::string_view)(myGrid.rule) // Creates a human-readable std::string_view ("B3/S23")
+
 myGrid.readstr("...") // Sets rule to rulestring "...", returns true if successful, false if rulestring is invalid
 myGrid.rule = "..." // Sets rule to rulestring "...", throws std::invalid_argument if rulestring is invalid
 
@@ -89,20 +96,28 @@ The edge topology may be included in the grid's constructor, or modified by sett
 Additionally, joined edges may be "shifted" relative to each other (see diagram at bottom of file) using the
 .shift() member function. This has no effect on planes.
 
-Examples:
+// Examples:
 CellGrid torusGrid(50, 50, "", CellGrid::torus) // rule defaults to Life
 CellGrid sphereGrid(torusGrid, "", CellGrid::sphere) // a copy of torusGrid but with sphere topology
 sphereGrid.edge = CellGrid::cross // sphereGrid is now a cross-surface
-sphereGrid.edge = CellGrid::Topology{5} // sphereGrid is now a sphere, created from the code 5
+sphereGrid.edge = CellGrid::Topology{5} // sphereGrid is now a sphere, created from the code 5 (explicit)
 torusGrid.shift(2) // the top & bottom edges of torusGrid are now shifted 2 cells relative to each other
                    // (imagine a rectangular tiling of CellGrids, where each next row is shifted 2 cells to the right)
 torusGrid.shift(-4) // torusGrid is now shifted horizontally 4 cells in the opposite direction
 torusGrid.shift(2, true) // torusGrid is now shifted vertically 2 cells
-	[ edge behavior is currently unfinished;
-	  the only currently functional options
-	    are plane, torus, and shifted torus ]
+	[ edge behavior is currently unfinished; the only functional
+	  options are plane, torus, and horizontally shifted torus ]
 // The names of the edge behaviors (as C-style strings) are stored in the non-const static member
-   CellGrid::Topology::names. The name of Topology instance may be accessed using .cstr().
+   CellGrid::Topology::names. The name of a Topology instance may be accessed using .cstr() [c-style
+   string], .str() [std::string], or .strv [std::string_view].
+
+// CellGrid::iterator and ::const_iterator classes are available, but the non-const ::iterator
+     may only be used before the grid has started running the CA (before operator++ is called).
+   If you would like to use the non-const ::iterator after running a few generations, you can
+     .pause() the grid, use the iterator, and then resume it by calling operator++ again.
+   CellGrid::iterator::nextRow, ::prevRow, and ::moveRow(int32) may be used to directly
+       navigate vertically. ++ (increment) is faster than -- (decrement).
+
 // Basic overloads for std::ostream::operator<< are provided for CellGrid, CellGrid::Rule, and CellGrid::Topology.
 
 ***********/
@@ -110,7 +125,6 @@ torusGrid.shift(2, true) // torusGrid is now shifted vertically 2 cells
 /*
   to do:
   - fix the issues with the constructors
-  - support std::string and std::string_view
   - integrate some std::algorithms to make simulations faster (or learn parallelism)
   - add options for different edge behaviors (in progress!)
   - support some new families of rules (isotropic, generations, LtL)
@@ -129,10 +143,10 @@ class CellGrid {
 	using i32 = std::int_fast32_t; // grid dimensions are 32-bit integers
 	using i64 = std::int_fast64_t; // why not
 	using uch = unsigned char;
+	using stv = std::string_view;
 public:
 	static_assert(sizeof(i32) <= sizeof(size_t));
-	static constexpr u32 defaultRule{ 0b00000110000000100l }; // B3/S23 Conway's Game of Life
-	  /*  it won't let me make defaultRule non-const :(  */
+	static u32 defaultRule; // "B3/S23" == 0b00000110000000100i32 == 3076 == Conway's Game of Life
 protected:
 	bool** dat, ** act, // stores grid and active cells
 	     * dst{nullptr}, * dpv{nullptr}, * dcr{nullptr}, // helper arrays for calculations
@@ -143,6 +157,214 @@ protected:
 	i32 w, h;
 	i32 esh{};
 	bool vsh{};
+	// Simulation algorithm: the only important part of the class
+	// it's very slow... i need to find ways to optimize it
+	virtual void algorithm(const bool* birth, const bool* death, i32 (CellGrid::*edgeCount)(i32, i32),
+	                       void (CellGrid::*edgeSet)(i32, i32, bool), bool flicker) {
+		int neighbors;
+		i32 wm1{ w - 1 }, hm1{ h - 1 };
+		for (i32 x{}; x != w; ++x) if (acr[x]) {
+			neighbors = (this->*edgeCount)(x, 0); // i hate this syntax. https://stackoverflow.com/a/2402607 tysm
+			if (dcr[x]) { if (death[neighbors]) (this->*edgeSet)(x, 0, false); }
+			else if (birth[neighbors]) (this->*edgeSet)(x, 0, true);
+		}
+		if (h != 1) { [[likely]];
+		bool* dnx, * asp, * asc, * asn;
+		for (i32 x, y{1}, xm1, xp1; y != hm1; ++y) {
+			dnx = dat[y + 1];
+			asp = act[y - 1], asc = act[y], asn = act[y + 1];
+			for (i32 i{}; i != w; ++i) {
+				dpv[i] = dcr[i];
+				dcr[i] = dat[y][i];
+				acr[i] = anx[i];
+				anx[i] = act[y+1][i]; // y < h-1
+				if (y+1 != hm1) act[y+1][i] = false;
+			}
+			if (*acr) {
+				neighbors = (this->*edgeCount)(0, y);
+				if (*dcr) { if (death[neighbors]) (this->*edgeSet)(0, y, false); }
+				else if (birth[neighbors]) (this->*edgeSet)(0, y, true);
+			}
+			if (acr[wm1]) {
+				neighbors = (this->*edgeCount)(wm1, y);
+				if (dcr[wm1]) { if (death[neighbors]) (this->*edgeSet)(wm1, y, false); }
+				else if (birth[neighbors]) (this->*edgeSet)(wm1, y, true);
+			}
+			if (w != 1) {
+				xm1 = 0; x = 1; xp1 = 2;
+				if (flicker) {for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
+					neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
+					          + dcr[xm1]          + dcr[xp1]
+					          + dnx[xm1] + dnx[x] + dnx[xp1];
+					if (dcr[x]) {
+						if (death[neighbors]) dat[y][x] = false;
+						else continue;
+					}
+					else {
+						if (birth[neighbors]) dat[y][x] = true;
+						else continue;
+					}
+					asp[xm1] = asp[x] = asp[xp1] =
+					asc[xm1] = asc[x] = asc[xp1] =
+					asn[xm1] = asn[x] = asn[xp1] = true;
+				}} else for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
+					neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
+					          + dcr[xm1]          + dcr[xp1]
+					          + dnx[xm1] + dnx[x] + dnx[xp1];
+					if (dcr[x]) {
+						if (death[neighbors]) dat[y][x] = false;
+						else continue;
+					}
+					else {
+						if (birth[neighbors]) dat[y][x] = true;
+						else continue;
+					}
+					asp[xm1] = asp[x] = asp[xp1] =
+					asc[xm1]          = asc[xp1] =
+					asn[xm1] = asn[x] = asn[xp1] = true;
+					// if Rule.canFlicker() is false, the current cell does
+					//   not have to be activated for the next generation
+				}
+			}
+		}
+		for (i32 i{}; i != w; ++i) {
+			dpv[i] = dcr[i];
+			dcr[i] = dat[hm1][i];
+			acr[i] = als[i];
+		}
+		for (i32 x{}; x != w; ++x) if (acr[x]) {
+			neighbors = (this->*edgeCount)(x, hm1);
+			if (dcr[x]) { if (death[neighbors]) (this->*edgeSet)(x, hm1, false); }
+			else if (birth[neighbors]) (this->*edgeSet)(x, hm1, true);
+		}
+		}
+	}
+	void algprep(i32 (CellGrid::*&edgeCount)(i32, i32), void (CellGrid::*&edgeSet)(i32, i32, bool), bool flicker) {
+		// member function pointers, passed by reference. this syntax is very confusing :(
+		if (!dst) {
+			dst = new bool[w];
+			dpv = new bool[w];
+			dcr = new bool[w];
+			acr = new bool[w];
+			anx = new bool[w];
+			als = new bool[w];
+		}
+		switch (edge.id) {
+		case 0:
+			edgeCount = &CellGrid::planeCount;
+			break;
+		case 1:
+			edgeCount = esh ? &CellGrid::shTorusCount : &CellGrid::torusCount;
+			break;
+		case 5:
+			edgeCount = esh ? &CellGrid::shSphereCount : &CellGrid::sphereCount;
+			break;
+		default:
+			edgeCount = esh ? &CellGrid::shCrossesCount : &CellGrid::crossesCount;
+			break;
+		}
+		if (flicker) {
+			switch (edge.id) {
+			case 0:
+				edgeSet = &CellGrid::planeSetFl;
+				break;
+			case 1:
+				edgeSet = esh ? &CellGrid::shTorusSetFl : &CellGrid::torusSetFl;
+				break;
+			case 5:
+				edgeSet = esh ? &CellGrid::shSphereSetFl : &CellGrid::sphereSetFl;
+				break;
+			default:
+				edgeSet = esh ? &CellGrid::shCrossesSetFl : &CellGrid::crossesSetFl;
+				break;
+			}
+		}
+		else {
+			switch (edge.id) {
+			case 0:
+				edgeSet = &CellGrid::planeSet;
+				break;
+			case 1:
+				edgeSet = esh ? &CellGrid::shTorusSet : &CellGrid::torusSet;
+				break;
+			case 5:
+				edgeSet = esh ? &CellGrid::shSphereSet : &CellGrid::sphereSet;
+				break;
+			default:
+				edgeSet = esh ? &CellGrid::shCrossesSet : &CellGrid::crossesSet;
+				break;
+			}
+		}
+		i32 hm1{ h - 1 };
+		if (!started) {
+			i32 wm1{ w - 1 };
+			for (i32 i{}, j; i != h; ++i) {
+				bool* asp{ i ? act[i - 1] : act[hm1] },
+					* asc{ act[i] },
+					* asn{ i == hm1 ? *act : act[i + 1] };
+				for (j = 0;;) {
+					if (i && i != hm1 && j && j != -1) {
+						//if (flicker) {
+						if (j != wm1 && j != w && dat[i][j])
+							asp[j-1] = asp[j] = asp[j+1] =
+							asc[j-1] = asc[j] = asc[j+1] =
+							asn[j-1] = asn[j] = asn[j+1] = true;
+						else if (--j != wm1 && dat[i][j])
+							asp[j-1] = asp[j] = asp[j+1] =
+							asc[j-1] = asc[j] = asc[j+1] =
+							asn[j-1] = asn[j] = asn[j+1] = true;
+						else if (dat[i][--j])
+							asp[j-1] = asp[j] = asp[j+1] =
+							asc[j-1] = asc[j] = asc[j+1] =
+							asn[j-1] = asn[j] = asn[j+1] = true;
+						j += 3;
+						if (j == w + 1) j = -1;
+						/*}
+						else {
+						if (dat[i][j])
+						asp[j-1] = asp[j] = asp[j+1] =
+						asc[j-1]          = asc[j+1] =
+						asn[j-1] = asn[j] = asn[j+1] = true;
+						++j;
+						if (j == wm1) j = -1;
+						}*/
+					}
+					else {
+						if (j == -1) j = wm1;
+						i32 jm1{ j ? j - 1 : wm1 },
+							jp1{ j == wm1 ? 0 : j + 1 };
+						if (flicker) {
+							if (dat[i][j]) {
+								asp[jm1] = asp[j] = asp[jp1] =
+									asc[jm1] = asc[j] = asc[jp1] =
+									asn[jm1] = asn[j] = asn[jp1] = true;
+								if (i && i != hm1) j += 2;
+							}
+						}
+						else if (dat[i][j])
+							asp[jm1] = asp[j] = asp[jp1] =
+							asc[jm1]          = asc[jp1] =
+							asn[jm1] = asn[j] = asn[jp1] = true;
+						if (j == wm1) break;
+						++j;
+					}
+				}
+			}
+			started = true;
+		}
+		for (i32 i{}; i != w; ++i) {
+			dst[i] =
+				dcr[i] = dat[0][i];
+			dpv[i] = dat[hm1][i];
+			acr[i] = act[0][i];
+			als[i] = act[hm1][i];
+			act[0][i] = act[hm1][i] = false;
+			if (h != 1) {
+				anx[i] = act[1][i];
+				act[1][i] = false;
+			}
+		}
+	}
 	i32 planeCount(i32 x, i32 y) {
 		if (y) {if (y == h - 1) { // would one return statement and a bunch of ternary ?: operators be faster?
 			if (x) {
@@ -314,15 +536,18 @@ protected:
 		for (i32 i{}; i != h; ++i) act[i][0] = act[i][w-1] = true;
 	}
 	void construct(i32 wdt, i32 hgt) {
-		assert(wdt > 0 && wdt < 65536l && hgt > 0 && hgt < 65536l
+		assert(wdt >= 0 && wdt < 65536i32 && hgt >= 0 && hgt < 65536i32
 		       && (edge != sphere || wdt == hgt)); // if topology is sphere, width must equal height
-		dat = new bool*[hgt];
-		act = new bool*[hgt];
-		for (i32 i{}, j; i != hgt; ++i) {
-			dat[i] = new bool[wdt];
-			act[i] = new bool[wdt];
-			for (j = 0; j != wdt; ++j) dat[i][j] = false;
+		if (wdt && hgt) {
+			dat = new bool*[hgt];
+			act = new bool*[hgt];
+			for (i32 i{}, j; i != hgt; ++i) {
+				dat[i] = new bool[wdt];
+				act[i] = new bool[wdt];
+				for (j = 0; j != wdt; ++j) dat[i][j] = false;
+			}
 		}
+		else dat = act = nullptr;
 	}
 	void moveConstruct(CellGrid&& grid) {
 		dat = grid.dat;
@@ -336,12 +561,14 @@ protected:
 		drg = grid.drg;
 		als = grid.als;
 		pRow = grid.pRow;
+		started = grid.started;
 		grid.dat = grid.act = nullptr;
 		grid.dst = grid.dpv = grid.dcr =
 		grid.acr = grid.anx = grid.als =
 		grid.dlf = grid.drg = nullptr;
 		grid.pRow = nullptr;
-		started = grid.started;
+		grid.w = grid.h = grid.started = false;
+		grid.gen = 0;
 	}
 public:
 	class Rule {
@@ -377,11 +604,13 @@ public:
 			}
 		}
 		Rule(CellGrid* gd, const char* rulestr)	: grid{ gd } { operator=(rulestr); }
+		Rule(CellGrid* gd, stv rulestr)	: grid{ gd } { operator=(rulestr.data()); }
 	public:
 		explicit Rule(u32 cd) noexcept : Rule{ nullptr, cd } {}
 		Rule(const Rule& rule) noexcept : Rule{ nullptr, rule } {}
 		Rule(Rule&& rule) noexcept : Rule{ nullptr, std::move(rule) } {}
 		explicit Rule(const char* rulestr) : grid{ nullptr } { operator=(rulestr); }
+		explicit Rule(stv rulestr) : grid{ nullptr } { operator=(rulestr.data()); }
 		virtual ~Rule() { delete[] srep; }
 		u32 operator=(u32 cd) noexcept {
 			if (!cd) cd = 131072;
@@ -421,7 +650,7 @@ public:
 			return *this;
 		}
 		bool readstr(const char* string) {
-			if (string == nullptr) {
+			if (string == nullptr || !*string) {
 				operator=(defaultRule);
 				return true;
 			}
@@ -470,13 +699,19 @@ public:
 				}
 			return false;
 		}
-		bool operator=(const char* string) { if (!readstr(string)) throw std::invalid_argument{"Invalid rulestring"}; }
+		bool readstr(stv string) { return readstr(string.data()); } // todo: use a safer alternative to .data()
+		Rule& operator=(const char* string)
+			{ if (!readstr(string)) throw std::invalid_argument{"Invalid rulestring"}; return *this; }
+		Rule& operator=(stv string)
+			{ if (!readstr(string.data())) throw std::invalid_argument{"Invalid rulestring"}; return *this; }
 		bool operator==(u32 cd) const { return code == cd; }
 		bool operator==(Rule& rl) const { return code == rl.code; }
-		bool operator==(char* string) const { return code == Rule{nullptr, string}.code; }
+		bool operator==(const char* string) const { return code == Rule{nullptr, string}.code; }
+		bool operator==(stv string) const { return code == Rule{nullptr, string.data()}.code; }
 		bool operator!=(u32 cd) const { return code != cd; }
 		bool operator!=(Rule& rl) const { return code != rl.code; }
-		bool operator!=(char* string) const { return code != Rule{nullptr, string}.code; }
+		bool operator!=(const char* string) const { return code != Rule{nullptr, string}.code; }
+		bool operator!=(stv string) const { return code != Rule{nullptr, string.data()}.code; }
 		bool b(int i) const { return bArr[i]; }
 		bool s(int i) const { return !dArr[i]; }
 		bool d(int i) const { return dArr[i]; }
@@ -490,23 +725,27 @@ public:
 			if (!srep) {
 				int i{}, count{4};
 				u32 pos{1};
-				for (; pos != 131072l; pos <<= 1) count += code & pos;
+				for (; pos != 131072i32; pos <<= 1) count += code & pos;
 				srep = new char[count] {'B'};
 				count = 0;
 				for (pos = 1; pos != 256; ++i, pos <<= 1)
 					if (code & pos) srep[++count] = '1' + i;
 				srep[++count] = '/';
 				srep[++count] = 'S';
-				for (i = 0; pos != 131072l; ++i, pos <<= 1)
+				for (i = 0; pos != 131072i32; ++i, pos <<= 1)
 					if (code & pos) srep[++count] = '0' + i;
 				srep[++count] = '\0';
 			}
 			return srep;
 		}
+		std::string str() const { return cstr(); }
+		std::string_view strv() const { return cstr(); }
 		operator const char*() const { return cstr(); }
+		operator std::string() const { return cstr(); }
+		operator std::string_view() const { return cstr(); }
 		operator u32() const { return code; }
-		friend void swap(CellGrid&, CellGrid&);
-		friend void swap(Rule&, Rule&);
+		friend void swap(CellGrid&, CellGrid&) noexcept;
+		friend void swap(Rule&, Rule&) noexcept;
 		friend std::istream& operator>>(std::istream&, Rule&);
 	};
 	class Topology { // This is a class instead of an enumeration to resolve ambiguities in the CellGrid constructors
@@ -520,32 +759,24 @@ public:
 			{ assert(id >= 0 && id < 6); }
 		Topology(CellGrid* parent, int code) : grid{parent}, id{(char)code} { assert(code >= 0 && code < 6); }
 	public:
-		static char names[6][24]; // initialized outside CellGrid (right before the end of the file)
+		static constexpr char names[5][14]{ "plane\0\0\0\0\0\0\0\0", "torus\0\0\0\0\0\0\0\0",
+			"Klein bottle\0", "cross-surface", "sphere\0\0\0\0\0\0\0" }; // the compiler complains if i omit the \0's
 		explicit Topology(char code) : grid{nullptr}, id{code} { assert(code >= 0 && code < 6); }
 		Topology(const Topology& top) : grid{nullptr}, id{top.id} {}
 		void operator=(char code) {
 			if (code >= '0') code -= '0';
 			assert(code >= 0 && code < 6);
 			id = code;
-			if (grid) {
-				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-				else if (grid->started) grid->primeEdge();
-			}
+			if (grid && grid->started) grid->primeEdge();
 		}
 		void operator=(int code) {
 			assert(code >= 0 && code < 6);
 			id = code;
-			if (grid) {
-				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-				else if (grid->started) grid->primeEdge();
-			}
+			if (grid && grid->started) grid->primeEdge();
 		}
 		void operator=(const Topology& ebh) {
 			id = ebh.id;
-			if (grid) {
-				if (grid->width != grid->w || grid->height != grid->h) grid->resize();
-				else if (grid->started) grid->primeEdge();
-			}
+			if (grid && grid->started) grid->primeEdge();
 		}
 		bool operator==(const Topology& ebh) const { return id == ebh.id; }
 		bool operator!=(const Topology& ebh) const { return id != ebh.id; }
@@ -554,13 +785,18 @@ public:
 		bool operator==(int code) const { return (int)id == code; }
 		bool operator!=(int code) const { return (int)id != code; }
 		char getCode() const { return id; }
-		const char* cstr() const { return names[id]; }
-		operator const char*() const { return cstr(); }
-		friend void swap(CellGrid&, CellGrid&);
-		friend void swap(Topology&, Topology&);
+		const char* cstr() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		std::string str() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		std::string_view strv() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		operator const char*() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		operator std::string() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		operator std::string_view() const { return names[id == 4 ? 3 : id == 5 ? 4 : id]; }
+		friend void swap(CellGrid&, CellGrid&) noexcept;
+		friend void swap(Topology&, Topology&) noexcept;
 		friend std::istream& operator>>(std::istream&, Topology&);
 	};
-	i32 width, height;
+	i32 width() { return w; };
+	i32 height() { return h; };
 	Rule rule;
 	static const Topology plane, torus, bottle, vbottle, hbottle, cross, sphere;
 	/* these are initialized outside of the class (right before the end of the file)
@@ -569,67 +805,52 @@ public:
 	Topology& topology{edge};
 	i32 gen;
 	CellGrid(i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
+	  : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
+	  : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
+		{ construct(wdt, hgt); }
+	CellGrid(i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	  : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
+	  : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, rl}
 		{ construct(wdt, hgt); }
 	CellGrid(i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
-	  : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, std::move(rl)}
+	  : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{gn}, rule{this, std::move(rl)}
 		{ construct(wdt, hgt); }
-	CellGrid(i32 wdt, i32 hgt, Topology ebh = plane) : w{wdt}, width{wdt}, h{hgt}, height{hgt}, edge{this, ebh.id}, gen{}, rule{this, 0u}
-		{ construct(wdt, hgt); }          // default edge behavior is now plane, not torus!
-	CellGrid(const CellGrid& grid, const char* rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, const char* rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, const char* rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, std::move(rl), ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh) : CellGrid(grid.width, grid.height, std::move(rl), ebh, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid.width, grid.height, std::move(rl), grid.edge, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, u32 rl, Topology ebh, i32 gn) : CellGrid(grid.width, grid.height, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, u32 rl, Topology ebh) : CellGrid(grid.width, grid.height, rl, ebh, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.width, grid.height, rl, grid.edge, grid.gen) {
-		for (i32 i{}, j; i != grid.h && i != grid.height; ++i)
-			for (j = 0; j != grid.w && j != grid.width; ++j) dat[i][j] = grid.dat[i][j];
-	}
+	CellGrid(i32 wdt, i32 hgt, Topology ebh = plane) : w{wdt}, h{hgt}, edge{this, ebh.id}, gen{}, rule{this, 0u}
+		{ construct(wdt, hgt); }
+	CellGrid(const CellGrid& grid, const char* rl, Topology ebh, i32 gn) : CellGrid(grid.w, grid.h, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, const char* rl, Topology ebh) : CellGrid(grid.w, grid.h, rl, ebh, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, const char* rl) : CellGrid(grid.w, grid.h, rl, grid.edge, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, stv rl, Topology ebh, i32 gn) : CellGrid(grid.w, grid.h, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, stv rl, Topology ebh) : CellGrid(grid.w, grid.h, rl, ebh, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, stv rl) : CellGrid(grid.w, grid.h, rl, grid.edge, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh, i32 gn) : CellGrid(grid.w, grid.h, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, const Rule& rl, Topology ebh) : CellGrid(grid.w, grid.h, rl, ebh, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, const Rule& rl) : CellGrid(grid.w, grid.h, rl, grid.edge, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh, i32 gn) : CellGrid(grid.w, grid.h, std::move(rl), ebh, gn)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, Rule&& rl, Topology ebh) : CellGrid(grid.w, grid.h, std::move(rl), ebh, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, Rule&& rl) : CellGrid(grid.w, grid.h, std::move(rl), grid.edge, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, u32 rl, Topology ebh, i32 gn) : CellGrid(grid.w, grid.h, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, u32 rl, Topology ebh) : CellGrid(grid.w, grid.h, rl, ebh, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, u32 rl) : CellGrid(grid.w, grid.h, rl, grid.edge, grid.gen)
+		{ for (i32 i{}, j; i != grid.h; ++i) for (j = 0; j != grid.w; ++j) dat[i][j] = grid.dat[i][j]; }
 	CellGrid(const CellGrid& grid) : CellGrid(grid, grid.rule, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, const char* rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
@@ -639,6 +860,14 @@ public:
 	}
 	CellGrid(CellGrid&& grid, const char* rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
 	CellGrid(CellGrid&& grid, const char* rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, stv rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
+		moveConstruct(std::move(grid));
+		rule = rl;
+		edge = ebh;
+		gen = gn;
+	}
+	CellGrid(CellGrid&& grid, stv rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, stv rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, const Rule& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
 		rule = rl;
@@ -664,35 +893,43 @@ public:
 	CellGrid(CellGrid&& grid, u32 rl, Topology ebh) : CellGrid(std::move(grid), rl, ebh, grid.gen) {}
 	CellGrid(CellGrid&& grid, u32 rl) : CellGrid(std::move(grid), rl, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid) noexcept : CellGrid(std::move(grid), std::move(grid.rule), grid.edge, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
-			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
-			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, std::move(rl), ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
-			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh) : CellGrid(grid, wdt, hgt, std::move(rl), ebh, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(grid, wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn) {
-		for (i32 i{}, j; i != grid.h && i != hgt; ++i)
-			for (j = 0; j != grid.w && j != wdt; ++j) dat[i][j] = grid.dat[i][j];
-	}
-	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh) : CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh, i32 gn)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { for (i32 i{}, j; i != grid.h && i != h; ++i)
+											for (j = 0; j != grid.w && j != w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh)
+	: CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const char* rl)
+	: CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, stv rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h && i != h; ++i)
+			  for (j = 0; j != grid.w && j != w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, stv rl, Topology ebh)
+	: CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, stv rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh, i32 gn)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { for (i32 i{}, j; i != grid.h && i != h; ++i)
+		                                    for (j = 0; j != grid.w && j != w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh)
+	: CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, const Rule& rl)
+	: CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh, i32 gn)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
+		{ for (i32 i{}, j; i != grid.h && i != h; ++i)
+			  for (j = 0; j != grid.w && j != w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh)
+	: CellGrid(grid, wdt, hgt, std::move(rl), ebh, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, Rule&& rl)
+	: CellGrid(grid, wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh, i32 gn) : CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != grid.h && i != h; ++i)
+			  for (j = 0; j != grid.w && j != w; ++j) dat[i][j] = grid.dat[i][j]; }
+	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh)
+	: CellGrid(grid, wdt, hgt, rl, ebh, grid.gen) {}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(grid, wdt, hgt, rl, grid.edge, grid.gen) {}
 	CellGrid(const CellGrid& grid, i32 wdt, i32 hgt) : CellGrid(grid, wdt, hgt, grid.rule, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
-		width = wdt;
-		height = hgt;
 		if (started) {
 			started = false;
 			rule = rl;
@@ -700,13 +937,29 @@ public:
 		} else rule = rl;
 		edge = ebh;
 		gen = gn;
+		resize(wdt, hgt);
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl, Topology ebh)
+	: CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const char* rl)
+	: CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, stv rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
+		moveConstruct(std::move(grid));
+		if (started) {
+			started = false;
+			rule = rl;
+			started = true;
+		} else rule = rl;
+		edge = ebh;
+		gen = gn;
+		resize(wdt, hgt);
+	}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, stv rl, Topology ebh)
+	: CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, stv rl)
+	: CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
-		width = wdt;
-		height = hgt;
 		if (started) {
 			started = false;
 			rule = rl;
@@ -714,13 +967,14 @@ public:
 		} else rule = rl;
 		edge = ebh;
 		gen = gn;
+		resize(wdt, hgt);
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl, Topology ebh)
+	: CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, const Rule& rl)
+	: CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
-		width = wdt;
-		height = hgt;
 		if (started) {
 			started = false;
 			rule = std::move(rl);
@@ -728,68 +982,151 @@ public:
 		} else rule = std::move(rl);
 		edge = ebh;
 		gen = gn;
+		resize(wdt, hgt);
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl) : CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl, Topology ebh)
+	: CellGrid(std::move(grid), wdt, hgt, std::move(rl), ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, Rule&& rl)
+	: CellGrid(std::move(grid), wdt, hgt, std::move(rl), grid.edge, grid.gen) {}
 	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh, i32 gn) : rule{this}, edge{this} {
 		moveConstruct(std::move(grid));
-		width = wdt;
-		height = hgt;
 		if (started) {
 			started = false;
 			rule = rl;
 			started = true;
 		} else rule = rl;
 		gen = gn;
+		resize(wdt, hgt);
 	}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh) : CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl) : CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
-	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt) : CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl, Topology ebh)
+	: CellGrid(std::move(grid), wdt, hgt, rl, ebh, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt, u32 rl)
+	: CellGrid(std::move(grid), wdt, hgt, rl, grid.edge, grid.gen) {}
+	CellGrid(CellGrid&& grid, i32 wdt, i32 hgt)
+	: CellGrid(std::move(grid), wdt, hgt, std::move(grid.rule), grid.edge, grid.gen) {}
 		// why does the debugger warn me about "use of a moved-from object"? grid.rule hasn't been moved yet...
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
 	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn)
+	CellGrid(const bool* const* cells, i32 wdt, i32 hgt, u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	CellGrid(const bool* const* cells, i32 wdt, i32 hgt) : CellGrid(wdt, hgt)
-		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	CellGrid(const bool* cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	CellGrid(const bool* cells, i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	CellGrid(const bool* cells, i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	CellGrid(const bool* cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	CellGrid(const bool* cells, i32 wdt, i32 hgt, u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
 	CellGrid(bool**&& cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, std::move(rl), ebh, gn) { dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0)
-		: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
-	CellGrid(bool**&& cells, i32 wdt, i32 hgt)
-		: CellGrid(wdt, hgt) { dat = cells; }
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn) { dat = cells; }
+	CellGrid(bool**&& cells, i32 wdt, i32 hgt, u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { dat = cells; }
+	template<size_t W, size_t H>
+	CellGrid(const bool cells[H][W], i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { assert(wdt == W && hgt == H);
+		for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H>
+	CellGrid(const bool cells[H][W], i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { assert(wdt == W && hgt == H);
+		for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H>
+	CellGrid(const bool cells[H][W], i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { assert(wdt == W && hgt == H);
+		for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H>
+	CellGrid(const bool cells[H][W], i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn) { assert(wdt == W && hgt == H);
+		for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H>
+	CellGrid(const bool cells[H][W], i32 wdt, i32 hgt, u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) { assert(wdt == W && hgt == H);
+		for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
+	static constexpr auto intlim{ std::numeric_limits<int>::max() };
+	template<size_t W, size_t H> CellGrid(const bool cells[H][W], const char* rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(W, H, rl, ebh, gn) { assert(W <= intlim && H <= intlim);
+		for (i32 i{}, j; i != H; ++i) for (j = 0; j != W; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H> CellGrid(const bool cells[H][W], stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(W, H, rl, ebh, gn) { assert(W <= intlim && H <= intlim);
+		for (i32 i{}, j; i != H; ++i) for (j = 0; j != W; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H> CellGrid(const bool cells[H][W], const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(W, H, rl, ebh, gn) { assert(W <= intlim && H <= intlim);
+		for (i32 i{}, j; i != H; ++i) for (j = 0; j != W; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H> CellGrid(const bool cells[H][W], Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(W, H, std::move(rl), ebh, gn) { assert(W <= intlim && H <= intlim);
+		for (i32 i{}, j; i != H; ++i) for (j = 0; j != W; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t W, size_t H> CellGrid(const bool cells[H][W], u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(W, H, rl, ebh, gn) { assert(W <= intlim && H <= intlim);
+		for (i32 i{}, j; i != H; ++i) for (j = 0; j != W; ++j) dat[i][j] = cells[i][j]; }
+	template<size_t S> CellGrid(const bool cells[S], i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn= 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	template<size_t S> CellGrid(const bool cells[S], i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	template<size_t S> CellGrid(const bool cells[S], i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn= 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	template<size_t S> CellGrid(const bool cells[S], i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
+	template<size_t S> CellGrid(const bool cells[S], i32 wdt, i32 hgt, u32 rl = 0, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn)
+		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i * wdt + j]; }
 	/*
 	// I need to somehow prevent <T> from matching int, bool**, bool**&&, CellGrid&, and CellGrid&&
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, char* rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
+	template<class T> CellGrid(T& cells, i32 wdt, i32 hgt, const char* rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) {for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, i32 wdt, i32 hgt, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) {for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, i32 wdt, i32 hgt, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, rl, ebh, gn) {for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
 		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
-		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, std::move(rl), ebh, gn)
-		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0) : CellGrid(wdt, hgt, rl, ebh, gn)
-		{ for (i32 i{}, j; i != hgt; ++i) for (j = 0; j != wdt; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, char* rl, Topology ebh = plane, i32 gn = 0) : CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
-		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
-		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, Rule&& rl, Topology ebh = plane, i32 gn = 0) : CellGrid(cells[0].size(), cells.size(), std::move(rl), ebh, gn)
-		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> CellGrid(T cells, i32 rl, Topology ebh = plane, i32 gn = 0) : CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
-		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
-	template<class T> explicit CellGrid(T cells) : CellGrid((*cells).size(), cells.size())
-		{ for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = cells[i][j]; }
+	template<class T> CellGrid(T& cells, i32 wdt, i32 hgt, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(wdt, hgt, std::move(rl), ebh, gn)
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, i32 wdt, i32 hgt, u32 rl, Topology ebh = plane, i32 gn = 0
+	: CellGrid(wdt, hgt, rl, ebh, gn) {for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, const char* rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(cells[0].size(), cells.size(), rl, ebh, gn) 
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, stv rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, const Rule& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, Rule&& rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(cells[0].size(), cells.size(), std::move(rl), ebh, gn)
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> CellGrid(T& cells, i32 rl, Topology ebh = plane, i32 gn = 0)
+	: CellGrid(cells[0].size(), cells.size(), rl, ebh, gn)
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
+	template<class T> explicit CellGrid(T& cells) : CellGrid((*cells).size(), cells.size())
+		{ for (i32 x, y{}; auto i : cells) for (x = 0, ++y; auto j : *i) dat[y][x] = *j; }
 	*/
 	// am i crazy or do classes usually have this many constructors?
 	// is there a better way to do this??
@@ -813,8 +1150,6 @@ public:
 	}
 	CellGrid& operator=(CellGrid& grid) {
 		if (&grid == this) return *this;
-		if (grid.width != grid.w || grid.height != grid.h) grid.resize();
-		if (w != grid.w || h != grid.h) resize(grid.w, grid.h, false);
 		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = grid.dat[i][j];
 		if (started) {
 			if (grid.started) {
@@ -852,22 +1187,21 @@ public:
 		dlf = grid.dlf;
 		drg = grid.drg;
 		pRow = grid.pRow;
+		w = grid.w;
+		h = grid.h;
+		rule = std::move(grid.rule);
+		started = grid.started;
+		gen = grid.gen;
 		grid.dat = grid.act = nullptr;
 		grid.dst = grid.dpv = grid.dcr =
 		grid.acr = grid.anx = grid.als =
 		grid.dlf = grid.drg = nullptr;
-		started = false;
-		rule = std::move(grid.rule);
-		started = grid.started;
-		gen = grid.gen;
-		w = grid.w;
-		h = grid.h;
-		width = grid.width;
-		height = grid.height;
+		grid.w = grid.h = 0;
+		started = grid.started = false;
+		grid.gen = 0;
 		return *this;
 	}
 	CellGrid& operator=(const bool* const* grid) { // make sure input grid has the same dimensions as CellGrid!
-		if (width != w || height != h) resize();
 		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j)
 			dat[i][j] = grid[i][j],
 			act[i][j] = true;
@@ -875,33 +1209,6 @@ public:
 		return *this;
 	}
 	CellGrid& operator=(bool**&& grid) noexcept { // especially here!!! the error will not surface immediately
-		if (w == width) {
-			if (h != h) {
-				assert(height > 0); // asserts don't count as exceptions right...?
-				h = height;
-				delete[] dlf;
-				delete[] drg;
-				dlf = drg = nullptr;
-			}
-		} else {
-			assert(width > 0 && height > 0);
-			w = width;
-			h = height;
-			delete[] dst;
-			delete[] dpv;
-			delete[] dcr;
-			delete[] acr;
-			delete[] anx;
-			delete[] als;
-			delete[] pRow;
-			dst = dpv = dcr = acr = anx = als = nullptr;
-			pRow = nullptr;
-			if (h != h) {
-				delete[] dlf;
-				delete[] drg;
-				dlf = drg = nullptr;
-			}
-		}
 		if (grid == dat) return *this;
 		for (i32 i{}; i != h; ++i) delete[] dat[i];
 		delete[] dat;
@@ -911,34 +1218,28 @@ public:
 		return *this;
 	}
 	void shift(i32 shft) {
-		if (width != w || height != h) resize();
-		else if (started) primeEdge();
+		if (started) primeEdge();
 		if (vsh) esh = shft % h; // C++'s modulo % operator treats the dividend as an absolute
 		else esh = shft % w;     //   value and then multiplies by the sign of the dividend
 	}
 	void shift(i32 shft, bool vshft) {
-		if (width != w || height != h) resize();
 		if (started) primeEdge();
 		if (vshft) {
 			esh = shft % h;
-			vshft = true;
+			vsh = true;
 		} else {
 			esh = shft % w;
-			vshft = false;
+			vsh = false;
 		}
 	}
-	const bool* const* data() {
-		if (width != w || height != h) resize();
-		return dat;
-	}
+	const bool* const* data() { return dat; }
 	const bool* const* active() const { return act; } // for debugging | warning: act may be uninitialized
 	bool operator()(i32 x, i32 y) const {
 		if (x < 0 || x >= w || y < 0 || w >= h) return false;
 		return dat[y][x];
 	}
 	bool operator()(i32 x, i32 y, bool value) {
-		assert(x >= 0 && x < width && y >= 0 && y < height);
-		if (width != w && x >= w || height != h && y >= h) resize();
+		assert(x >= 0 && x < w && y >= 0 && y < h);
 		if (dat[y][x] != value) {
 			dat[y][x] = value;
 			if (started)
@@ -949,244 +1250,94 @@ public:
 		}
 		return value;
 	}
-	CellGrid& operator++() {
-		if (width != w || height != h) resize();
-		if (!dst) {
-			dst = new bool[width];
-			dpv = new bool[width];
-			dcr = new bool[width];
-			acr = new bool[width];
-			anx = new bool[width];
-			als = new bool[width];
-		}
+	virtual CellGrid& operator++() {
+		if (!w || !h) return *this;
 		bool flicker{ rule.canFlicker() };
-		const bool* birth{ rule.birthArr() };
-		const bool* death{ rule.deathArr() };
 		const i32 wm1{ w - 1 }, hm1{ h - 1 };
 		i32 (CellGrid::*edgeCount)(i32, i32); // C++ is confusing
-		switch (edge.id) {
-		case 0:
-			edgeCount = &CellGrid::planeCount;
-			break;
-		case 1:
-			edgeCount = esh ? &CellGrid::shTorusCount : &CellGrid::torusCount;
-			break;
-		case 5:
-			edgeCount = esh ? &CellGrid::shSphereCount : &CellGrid::sphereCount;
-			break;
-		default:
-			edgeCount = esh ? &CellGrid::shCrossesCount : &CellGrid::crossesCount;
-			break;
-		}
 		void (CellGrid::*edgeSet)(i32, i32, bool);
-		if (flicker) {
-			switch (edge.id) {
-			case 0:
-				edgeSet = &CellGrid::planeSetFl;
-				break;
-			case 1:
-				edgeSet = esh ? &CellGrid::shTorusSetFl : &CellGrid::torusSetFl;
-				break;
-			case 5:
-				edgeSet = esh ? &CellGrid::shSphereSetFl : &CellGrid::sphereSetFl;
-				break;
-			default:
-				edgeSet = esh ? &CellGrid::shCrossesSetFl : &CellGrid::crossesSetFl;
-				break;
-			}
-		}
-		else {
-			switch (edge.id) {
-			case 0:
-				edgeSet = &CellGrid::planeSet;
-				break;
-			case 1:
-				edgeSet = esh ? &CellGrid::shTorusSet : &CellGrid::torusSet;
-				break;
-			case 5:
-				edgeSet = esh ? &CellGrid::shSphereSet : &CellGrid::sphereSet;
-				break;
-			default:
-				edgeSet = esh ? &CellGrid::shCrossesSet : &CellGrid::crossesSet;
-				break;
-			}
-		}
-		if (!started) {
-			for (i32 i{}, j; i != h; ++i) {
-				bool* asp{ i ? act[i - 1] : act[hm1] },
-				    * asc{ act[i] },
-				    * asn{ i == hm1 ? *act : act[i + 1] };
-				for (j = 0;;) {
-					if (i && i != hm1 && j && j != -1) {
-						//if (flicker) {
-							if (j != wm1 && j != w && dat[i][j])
-								asp[j-1] = asp[j] = asp[j+1] =
-								asc[j-1] = asc[j] = asc[j+1] =
-								asn[j-1] = asn[j] = asn[j+1] = true;
-							else if (--j != wm1 && dat[i][j])
-								asp[j-1] = asp[j] = asp[j+1] =
-								asc[j-1] = asc[j] = asc[j+1] =
-								asn[j-1] = asn[j] = asn[j+1] = true;
-							else if (dat[i][--j])
-								asp[j-1] = asp[j] = asp[j+1] =
-								asc[j-1] = asc[j] = asc[j+1] =
-								asn[j-1] = asn[j] = asn[j+1] = true;
-							j += 3;
-							if (j == w + 1) j = -1;
-						/*}
-						else {
-							if (dat[i][j])
-								asp[j-1] = asp[j] = asp[j+1] =
-								asc[j-1]          = asc[j+1] =
-								asn[j-1] = asn[j] = asn[j+1] = true;
-							++j;
-							if (j == wm1) j = -1;
-						}*/
-					}
-					else {
-						if (j == -1) j = wm1;
-						i32 jm1{ j ? j - 1 : wm1 },
-							jp1{ j == wm1 ? 0 : j + 1 };
-						if (flicker) {
-							if (dat[i][j]) {
-								asp[jm1] = asp[j] = asp[jp1] =
-								asc[jm1] = asc[j] = asc[jp1] =
-								asn[jm1] = asn[j] = asn[jp1] = true;
-								if (i && i != hm1) j += 2;
-							}
-						}
-						else if (dat[i][j])
-							asp[jm1] = asp[j] = asp[jp1] =
-							asc[jm1]          = asc[jp1] =
-							asn[jm1] = asn[j] = asn[jp1] = true;
-						if (j == wm1) break;
-						++j;
-					}
-				}
-			}
-			started = true;
-		}
-		for (i32 i{}; i != w; ++i) {
-			dst[i] =
-			dcr[i] = dat[0][i];
-			dpv[i] = dat[hm1][i];
-			acr[i] = act[0][i];
-			als[i] = act[hm1][i];
-			act[0][i] = act[hm1][i] = false;
-			if (h != 1) {
-				anx[i] = act[1][i];
-				act[1][i] = false;
-			}
-		}
-		int neighbors;
-		for (i32 x{}; x != w; ++x) if (acr[x]) {
-			neighbors = (this->*edgeCount)(x, 0); // i hate this syntax. https://stackoverflow.com/a/2402607 tysm
-			if (dcr[x]) { if (death[neighbors]) (this->*edgeSet)(x, 0, false); }
-			else if (birth[neighbors]) (this->*edgeSet)(x, 0, true);
-		}
-		if (h != 1) { [[likely]];
-			bool* dnx, * asp, * asc, * asn;
-			for (i32 x, y{1}, xm1, xp1; y != hm1; ++y) {
-				dnx = dat[y + 1];
-				asp = act[y - 1], asc = act[y], asn = act[y + 1];
-				for (i32 i{}; i != w; ++i) {
-					dpv[i] = dcr[i];
-					dcr[i] = dat[y][i];
-					acr[i] = anx[i];
-					anx[i] = act[y+1][i]; // y < h-1
-					if (y+1 != hm1) act[y+1][i] = false;
-				}
-				if (*acr) {
-					neighbors = (this->*edgeCount)(0, y);
-					if (*dcr) { if (death[neighbors]) (this->*edgeSet)(0, y, false); }
-					else if (birth[neighbors]) (this->*edgeSet)(0, y, true);
-				}
-				if (acr[wm1]) {
-					neighbors = (this->*edgeCount)(wm1, y);
-					if (dcr[wm1]) { if (death[neighbors]) (this->*edgeSet)(wm1, y, false); }
-					else if (birth[neighbors]) (this->*edgeSet)(wm1, y, true);
-				}
-				if (w != 1) {
-					xm1 = 0; x = 1; xp1 = 2;
-					if (flicker) {for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
-						neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
-						          + dcr[xm1]          + dcr[xp1]
-						          + dnx[xm1] + dnx[x] + dnx[xp1];
-						if (dcr[x]) {
-							if (death[neighbors]) dat[y][x] = false;
-							else continue;
-						}
-						else {
-							if (birth[neighbors]) dat[y][x] = true;
-							else continue;
-						}
-						asp[xm1] = asp[x] = asp[xp1] =
-						asc[xm1] = asc[x] = asc[xp1] =
-						asn[xm1] = asn[x] = asn[xp1] = true;
-					}} else for (; x != wm1; ++x, ++xm1, ++xp1) if (acr[x]) {
-						neighbors = dpv[xm1] + dpv[x] + dpv[xp1]
-							+ dcr[xm1]          + dcr[xp1]
-							+ dnx[xm1] + dnx[x] + dnx[xp1];
-						if (dcr[x]) {
-							if (death[neighbors]) dat[y][x] = false;
-							else continue;
-						}
-						else {
-							if (birth[neighbors]) dat[y][x] = true;
-							else continue;
-						}
-						asp[xm1] = asp[x] = asp[xp1] =
-						asc[xm1]          = asc[xp1] =
-						asn[xm1] = asn[x] = asn[xp1] = true;
-						// if Rule.canFlicker() is false, the current cell does
-						//   not have to be activated for the next generation
-					}
-				}
-			}
-			for (i32 i{}; i != w; ++i) {
-				dpv[i] = dcr[i];
-				dcr[i] = dat[hm1][i];
-				acr[i] = als[i];
-			}
-			for (i32 x{}; x != w; ++x) if (acr[x]) {
-				neighbors = (this->*edgeCount)(x, hm1);
-				if (dcr[x]) { if (death[neighbors]) (this->*edgeSet)(x, hm1, false); }
-				else if (birth[neighbors]) (this->*edgeSet)(x, hm1, true);
-			}
-		}
+		algprep(edgeCount, edgeSet, flicker);
+		algorithm(rule.birthArr(), rule.deathArr(), edgeCount, edgeSet, flicker);
 		++gen;
 		return *this;
 	}
 	CellGrid& operator++(int) { return operator++(); }
-	CellGrid& operator+=(i32 gens) {
-		for (i32 i{}; i != gens; ++i) operator++();
+	virtual CellGrid& operator+=(i32 gens) {
+		if (gens < 0) throw std::logic_error{ "The operation you have requested is physically impossible." };
+		if (!w || !h) return *this;
+		bool flicker{ rule.canFlicker() };
+		const bool* birth{ rule.birthArr() };
+		const bool* death{ rule.deathArr() };
+		const i32 wm1{ w - 1 }, hm1{ h - 1 };
+		i32 (CellGrid::*edgeCount)(i32, i32);
+		void (CellGrid::*edgeSet)(i32, i32, bool);
+		algprep(edgeCount, edgeSet, flicker);
+		for (i32 i{}; i != gens; ++i) algorithm(birth, death, edgeCount, edgeSet, flicker);
+		gen += gens;
 		return *this;
 	}
 	CellGrid operator+(i32 gens) const {
 		CellGrid newGrid{*this};
-		for (i32 i{}; i != gens; ++i) ++newGrid;
-		return newGrid;
+		return newGrid += gens;
 	}
 	i64 count(bool state = true) const {
 		i64 result{};
-		if (width < w || height < h) for (i32 i{}, j; i != height; ++i) for (j = 0; j != width; ++j)
-			{ if (dat[i][j]) result++; }
-		else for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) if (dat[i][j]) result++;
+		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) if (dat[i][j]) result++;
 		if (state) return result;
-		else return (i64)width * (i64)height - result;
+		else return static_cast<i64>(w * h) - result;
 	}
-	void resize(i32 wdt = 0, i32 hgt = 0, bool keepCells = true, bool center = false) {
-		if (wdt) width = wdt;
-		if (hgt) height = hgt;
-		if (w == width) {
-			if (h == height) {
+	void resize(i32 wdt, i32 hgt, bool keepCells = true, bool center = false) {
+		assert(wdt >= 0 && hgt >= 0);
+		if (wdt && hgt) {
+			if (!w || !h) {
+				if (!dat) {
+					dat = new bool* [hgt];
+					act = new bool* [hgt];
+				}
+				for (i32 i{}; i != h; ++i) {
+					dat[i] = new bool[wdt];
+					act[i] = new bool[wdt];
+				}
+				w = wdt;
+				h = hgt;
+				return;
+			}
+		}
+		else {
+			if (dat) {
+				for (i32 i{}; i != h; ++i) {
+					delete[] dat[i];
+					delete[] act[i];
+				}
+				delete[] dat;
+				delete[] act;
+			}
+			if (!wdt) {
+				delete[] dst;
+				delete[] dpv;
+				delete[] dcr;
+				delete[] acr;
+				delete[] anx;
+				delete[] als;
+				dst = dpv = dcr = acr = anx = als = nullptr;
+			}
+			if (!hgt) {
+				delete[] dlf;
+				delete[] drg;
+				dlf = drg = nullptr;
+			}
+			w = wdt;
+			h = hgt;
+			return;
+		}
+		if (w == wdt) {
+			if (h == hgt) {
 				if (!keepCells) clear();
 				return;
 			}
-			assert(height > 0);
+			goto heqhgt;
 		}
 		else {
-			assert(width > 0 && height > 0);
 			delete[] dst;
 			delete[] dpv;
 			delete[] dcr;
@@ -1196,46 +1347,46 @@ public:
 			dst = dpv = dcr = acr = anx = als = nullptr;
 		}
 		#define hfsb(a, b) ( a < b ? (a - b) / 2 : (a - b + 1) / 2 )
-		if (h == height) {
+		if (h == hgt) heqhgt: {
 			bool* rda, * rac;
 			for (i32 i{}, j; i != h; ++i) {
 				if (keepCells) {
-					rda = new bool[width];
-					rac = new bool[width];
+					rda = new bool[wdt];
+					rac = new bool[wdt];
 					j = 0;
-					if (center) for (i32 k{ hfsb((i32)w, (i32)width) }; j != width; ++j, ++k) rda[j] =
+					if (center) for (i32 k{ hfsb(w, wdt) }; j != wdt; ++j, ++k) rda[j] =
 						k >= 0 && k < w ? dat[i][k] : false;
-					else for (; j != width; ++j) rda[j] = j < w ? dat[i][j] : false;
-				} else rda = new bool[width]{},
-				       rac = new bool[width]{};
+					else for (; j != wdt; ++j) rda[j] = j < w ? dat[i][j] : false;
+				} else rda = new bool[wdt]{},
+				       rac = new bool[wdt]{};
 				delete[] dat[i];
 				delete[] act[i];
 				dat[i] = rda;
 				act[i] = rac;
 			}
-			w = width;
+			w = wdt;
 		}
 		else {
-			bool** nda{ new bool*[height] },
-			    ** nac{ new bool*[height] };
-			for (i32 i{}, j; i != height; ++i) {
-				nda[i] = new bool[width];
-				nac[i] = new bool[width];
+			bool** nda{ new bool*[hgt] },
+			    ** nac{ new bool*[hgt] };
+			for (i32 i{}, j; i != hgt; ++i) {
+				nda[i] = new bool[wdt];
+				nac[i] = new bool[wdt];
 				j = 0;
 				if (keepCells) {
 					if (center) {
-						for (i32 hoff{ hfsb((i32)w, (i32)width) },
-						         ysrc{ (i32)i + hfsb((i32)h, (i32)height) }; j != width; ++j)
+						for (i32 hoff{ hfsb(w, wdt) },
+						         ysrc{ (i32)i + hfsb(h, hgt) }; j != wdt; ++j)
 							if (ysrc >= 0 && ysrc < h && j + hoff >= 0 && j + hoff < w)
 								nda[i][j] = dat[ysrc][j + hoff],
 								nac[i][j] = act[ysrc][j + hoff];
 							else nda[i][j] = nac[i][j] = false;
 					}
-					else for (; j != width; ++j)
+					else for (; j != wdt; ++j)
 						nda[i][j] = dat[i][j],
 						nac[i][j] = act[i][j];
 				}
-				else for (; j != width; ++j) nda[i][j] = false, nac[i][j] = false;
+				else for (; j != wdt; ++j) nda[i][j] = false, nac[i][j] = false;
 				if (i < h)
 					delete[] dat[i],
 					delete[] act[i];
@@ -1243,39 +1394,39 @@ public:
 			if (keepCells) {
 				i32 i{};
 				if (center) {
-					i32 hoff{ ((i32)width - (i32)w) / 2 }, voff{ ((i32)height - (i32)h) / 2 };
-					if (w < width) i = hoff;
-					if (h < height) {
-						for (; i - hoff != w && i != width; ++i) if (i >= 0)
-							(voff ? nac[voff-1][i] : nac[height-1][i]) = nac[voff][i] // buffer overrun warning?
-							  = nac[h-1 + voff][i] = nac[h + voff][i] = true;         // i don't understand how
+					i32 hoff{ (wdt - w) / 2 }, voff{ (hgt - h) / 2 };
+					if (w < wdt) i = hoff;
+					if (h < hgt) {
+						for (; i - hoff != w && i != wdt; ++i) if (i >= 0)
+							(voff ? nac[voff-1][i] : nac[hgt-1][i]) = nac[voff][i] // buffer overrun warning?
+							  = nac[h-1 + voff][i] = nac[h + voff][i] = true;      // i don't understand how
 						i = voff;
 					}
 					else {
-						for (; i - hoff != w && i != width; ++i) if (i >= 0)
-							nac[0][i] = nac[height - 1][i] = true;
+						for (; i - hoff != w && i != wdt; ++i) if (i >= 0)
+							nac[0][i] = nac[hgt - 1][i] = true;
 						i = 0;
 					}
-					if (w < width) for (; i - voff != h && i != height; ++i) if (i >= 0)
-						(hoff ? nac[i][hoff-1] : nac[i][width-1]) = nac[i][hoff]
+					if (w < wdt) for (; i - voff != h && i != hgt; ++i) if (i >= 0)
+						(hoff ? nac[i][hoff-1] : nac[i][wdt-1]) = nac[i][hoff]
 						  = nac[i][w-1 + hoff] = nac[i][w + hoff] = true;
-					else for (; i - voff != h && i != height; ++i) if (i >= 0)
-						nac[i][0] = nac[i][width-1] = true;
+					else for (; i - voff != h && i != hgt; ++i) if (i >= 0)
+						nac[i][0] = nac[i][wdt-1] = true;
 					// fix these                vvv
-					//nac[height-1][width-1] = true;
-					//if (w < width) nac[height-1][w] = (h > height) ? true : nac[h][w] = true;
-					//if (h < height) nac[h][width-1] = (w >  width) ? true : nac[h][w] = true;
+					//nac[hgt-1][wdt-1] = true;
+					//if (w < wdt) nac[hgt-1][w] = (h > hgt) ? true : nac[h][w] = true;
+					//if (h < hgt) nac[h][wdt-1] = (w > wdt) ? true : nac[h][w] = true;
 				}
 				else {
-					if (h < height) for (; i != w && i != width; ++i)
-						nac[0][i] = nac[h-1][i] = nac[h][i] = nac[height-1][i] = true;
-					else for (; i !=  width; ++i) nac[0][i] = nac[height-1][i] = true;
-					if (w < width) for (i = 0; i != h && i != height; ++i)
-						nac[i][0] = nac[i][w-1] = nac[i][w] = nac[i][width-1] = true;
-					else for (i = 0; i != height; ++i) nac[i][0] = nac[i][width-1] = true;
-					nac[height-1][width-1] = true;
-					if (w < width) nac[height-1][w] = (h >= height) ? true : nac[h][w] = true;
-					if (h < height) nac[h][width-1] = (w >=  width) ? true : nac[h][w] = true;
+					if (h < hgt) for (; i != w && i != wdt; ++i)
+						nac[0][i] = nac[h-1][i] = nac[h][i] = nac[hgt-1][i] = true;
+					else for (; i != wdt; ++i) nac[0][i] = nac[hgt-1][i] = true;
+					if (w < wdt) for (i = 0; i != h && i != hgt; ++i)
+						nac[i][0] = nac[i][w-1] = nac[i][w] = nac[i][wdt-1] = true;
+					else for (i = 0; i != hgt; ++i) nac[i][0] = nac[i][wdt-1] = true;
+					nac[hgt-1][wdt-1] = true;
+					if (w < wdt) nac[hgt-1][w] = (h >= hgt) ? true : nac[h][w] = true;
+					if (h < hgt) nac[h][wdt-1] = (w >= wdt) ? true : nac[h][w] = true;
 				}
 			}
 			delete[] dat;
@@ -1285,21 +1436,210 @@ public:
 			delete[] dlf;
 			delete[] drg;
 			dlf = drg = nullptr;
-			w = width;
-			h = height;
+			w = wdt;
+			h = hgt;
 		}
 	}
 	void resize(bool keepCells, bool center = false) { resize(0, 0, keepCells, center); }
 	void clear() {
-		for (i32 i{}, j, wdt{ width < w ? width : w }, hgt{ height < h ? height : h }; i != hgt; ++i)
-			for (j = 0; j != wdt; ++j) dat[i][j] = act[i][j] = false;
+		started = false;
+		for (i32 i{}, j; i != h; ++i) for (j = 0; j != w; ++j) dat[i][j] = act[i][j] = false;
 	}
-	bool isValid() const { return dat; }
-	void print(bool pGen = false) const {
+	void pause() { started = false; } // [Advanced] The grid resumes whenever operator++ is called.
+	     //        Resuming the grid requires some extra calculations, however, so pause only when necessary.
+	bool isActive() const { return started; }
+	bool isValid() const { return dat; } // returns false if width==0 or height==0 or if the grid has been moved-from
+	operator bool() const { return dat; }
+	class iterator; // almost the exact same as const_iterator but inheritance doesn't work in this case :(
+	class const_iterator {
+	protected:
+		friend class CellGrid;
+		friend class iterator;
+		// To fit within 256 bits, this class is optimized for operator* at the cost of a slower operator--
+		const CellGrid* grid;
+		const bool* pos, * rend; // warning: this iterator breaks when the grid is
+		i32 row{};               //    resized, use grid.cbegin() to get a new one
+		const_iterator(const CellGrid* gd, const bool* ps, i32 w) : grid{ gd }, pos{ ps }, rend{ ps + w } {}
+		// this could be faster if it were larger, would it be worth it? or should iterator classes stay lightweight
+	public:		                                                                                      // (spaceship)
+		const_iterator(const const_iterator&) = default;
+		const_iterator(const iterator& iter) : grid{ iter.grid }, pos{ iter.pos }, rend{ iter.rend }, row{ iter.row } {}
+		const_iterator& operator=(const const_iterator& iter) {
+			grid = iter.grid, pos = iter.pos, rend = iter.rend, row = iter.row;
+			return *this;
+		}
+		const_iterator& operator=(const iterator& iter) {
+			grid = iter.grid, pos = iter.pos, rend = iter.rend, row = iter.row;
+			return *this;
+		}
+		bool operator*() const {
+			assert(row >= 0 && row < grid->h); // hopefully this doesn't affect release performance
+			return *pos;
+		}
+		operator const bool*() const = delete; // if i decide to make CellGrid::dat one-dimensional, this
+		const_iterator& operator++() {         //  will become available (and everything will run faster)
+			++pos;
+			if (pos == rend) {
+				++row;
+				pos = grid->dat[row];
+				rend = pos + grid->w;
+			}
+			return *this;
+		}
+		const_iterator& operator++(int) { return operator++(); }
+		const_iterator& operator+=(i32 offset) { // should i return by value or reference?
+			if (offset < 0) return operator-=(offset);
+			pos += offset;
+			if (pos >= rend) {
+				row += offset / grid->w + 1;
+				bool* rowp{ grid->dat[row] };
+				pos = rowp + (pos - rend) % grid->w;
+				rend = rowp + grid->w;
+			}
+			return *this;
+		}
+		const_iterator& operator--() {
+			if (pos == rend - grid->w) { // would the [[unlikely]] attribute be helpful here?
+				--row;
+				rend = grid->dat[row] + grid->w;
+				pos = rend - 1;
+			} else --pos; // does the else branch make it faster or slower?
+			return *this;
+		}
+		const_iterator& operator--(int) { return operator--(); }
+		const_iterator& operator-=(i32 offset) {
+			if (offset < 0) return operator+=(offset);
+			pos -= offset;
+			if (pos < rend - grid->w) {
+				row -= offset / grid->w - 1; // C++'s integer division rounds towards 0
+				i32 pmod{ (i32)(pos - rend) % grid->w }; // C++'s modulo operator keeps the sign of the dividend
+				rend = grid->dat[row] + grid->w;
+				pos = rend + pmod; // pmod is negative
+			}
+		}
+		const_iterator& nextRow() {
+			i32 emp{ static_cast<i32>(pos - rend) }; // negative
+			rend = grid->dat[++row] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		const_iterator& prevRow() {
+			i32 emp{ static_cast<i32>(pos - rend) };
+			rend = grid->dat[--row] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		const_iterator& moveRow(i32 offset) {
+			i32 emp{ static_cast<i32>(pos - rend) };
+			rend = grid->dat[row += offset] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		bool operator==(const_iterator& iter) const { return pos == iter.pos; }
+		bool operator==(iterator& iter) const { return pos == iter.pos; }
+		bool operator==(const bool* ptr) const { return pos == ptr; }
+	};
+	const_iterator cbegin() const { return const_iterator{ this, *dat, w }; }
+	const_iterator cend() const { return const_iterator{ this, dat[h-1] + w-1, w }; }
+	//const_iterator crbegin() const { return const_iterator{ this, dat[h-1] + w, w }; }
+	//const_iterator crend() const { return const_iterator{ this, *dat - 1, w }; }
+	class iterator {
+		// This iterator can only be used when the grid has not started or is paused
+		//  (while it is not keeping track of active cells)
+	protected:
+		friend class CellGrid;
+		friend class const_iterator;
+		const CellGrid* grid;
+		bool* pos, * rend;
+		i32 row{};
+		iterator(const CellGrid* gd, bool* ps, i32 w) : grid{gd}, pos{ps}, rend{ ps + w } {}
+	public:
+		iterator(const iterator&) = default;
+		iterator(const const_iterator& iter) : grid{ iter.grid }, pos{ const_cast<bool*>(iter.pos) },
+			rend{ const_cast<bool*>(iter.rend) }, row{ iter.row } {} // Is this bad coding practice?
+		iterator& operator=(const iterator& iter) {
+			grid = iter.grid, pos = const_cast<bool*>(iter.pos), rend = const_cast<bool*>(iter.rend), row = iter.row;
+			return *this;
+		}
+		iterator& operator=(const const_iterator& iter) {
+			grid = iter.grid, pos = const_cast<bool*>(iter.pos), rend = const_cast<bool*>(iter.rend), row = iter.row;
+			return *this;
+		}
+		bool& operator*() const {
+			assert(!grid->started && row >= 0 && row < grid->h);
+			// If this assertion is failing, try pausing the grid using grid.pause() before using this iterator
+			return *pos;
+		}
+		iterator& operator++() {
+			++pos;
+			if (pos == rend) {
+				++row;
+				pos = grid->dat[row];
+				rend = pos + grid->w;
+			}
+			return *this;
+		}
+		iterator& operator++(int) { return operator++(); }
+		iterator& operator+=(i32 offset) {
+			if (offset < 0) return operator-=(offset);
+			pos += offset;
+			if (pos >= rend) {
+				row += offset / grid->w + 1;
+				bool* rowp{ grid->dat[row] };
+				pos = rowp + (pos - rend) % grid->w;
+				rend = rowp + grid->w;
+			}
+			return *this;
+		}
+		iterator& operator--() {
+			if (pos == rend - grid->w) {
+				--row;
+				rend = grid->dat[row] + grid->w;
+				pos = rend - 1;
+			} else --pos;
+			return *this;
+		}
+		iterator& operator--(int) { return operator--(); }
+		iterator& operator-=(i32 offset) {
+			if (offset < 0) return operator+=(offset);
+			pos -= offset;
+			if (pos < rend - grid->w) {
+				row -= offset / grid->w - 1; // C++'s integer division rounds towards 0
+				i32 pmod{ (i32)(pos - rend) % grid->w }; // C++'s modulo operator keeps the sign of the dividend
+				rend = grid->dat[row] + grid->w;
+				pos = rend + pmod; // pmod is negative
+			}
+		}
+		iterator& nextRow() {
+			i32 emp{ static_cast<i32>(pos - rend) }; // negative
+			rend = grid->dat[++row] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		iterator& prevRow() {
+			i32 emp{ static_cast<i32>(pos - rend) };
+			rend = grid->dat[--row] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		iterator& moveRow(i32 offset) {
+			i32 emp{ static_cast<i32>(pos - rend) };
+			rend = grid->dat[row += offset] + grid->w;
+			pos = rend + emp;
+			return *this;
+		}
+		operator bool*() const = delete;
+		bool operator==(bool* ptr) const { return pos == ptr; }
+	};
+	iterator begin() const { return iterator{ this, *dat, w }; }
+	iterator end() const { return iterator{ this, dat[h-1] + w-1, w }; }
+	//iterator rbegin() const { return iterator{ this, dat[h-1] + w, w }; }
+	//iterator rend() const { return iterator{ this, *dat - 1, w }; }
+	void print(bool pGen = false, std::ostream& ost = std::cout) const {
 		bool longpr{};
 		if (!pRow) pRow = new uch[w + 2];
 		else if (*pRow == '\0') longpr = true;
-		if (pGen) std::cout << "Generation " << gen << '\n';
+		if (pGen) ost << "Generation " << gen << '\n';
 		for (i32 i{}, j; i < h; i += 2) {
 			j = 0;
 			if (i + 1 == h) for (; j != w; ++j) pRow[j] = dat[i][j] ? 223 : ' ';
@@ -1307,12 +1647,12 @@ public:
 				dat[i][j] ? (dat[i+1][j] ? 219 : 223) : (dat[i+1][j] ? 220 : ' ');
 			pRow[w] = '\n';
 			pRow[w+1] = '\0';
-			std::cout << pRow;
+			ost << pRow;
 		}
 		if (longpr) *pRow = '\0';
 		else *pRow = (uch)255;
 	}
-	void printSafe(bool pGen = false, uch ch1 = '\0', uch ch2 = '\0') const {
+	void printSafe(bool pGen = false, uch ch1 = '\0', uch ch2 = '\0', std::ostream& ost = std::cout) const {
 		assert(ch1 != (uch)255 && ch2 != (uch)255);
 		if (ch1) { if (!ch2) ch2 = ch1; }
 		else ch1 = '[', ch2 = ']';
@@ -1321,7 +1661,7 @@ public:
 			delete[] pRow;
 			pRow = new uch[w * 2 + 2];
 		}
-		if (pGen) std::cout << "Generation " << gen << '\n';
+		if (pGen) ost << "Generation " << gen << '\n';
 		for (i32 i{}, j; i < h; ++i) {
 			for (j = 0; j != w; ++j) {
 				pRow[j*2] = dat[i][j] ? ch1 : ' ';
@@ -1329,24 +1669,35 @@ public:
 			}
 			pRow[w*2] = '\n';
 			pRow[w*2+1] = '\0';
-			std::cout << pRow;
+			ost << pRow;
 		}
 		*pRow = '\0';
 	}
-	friend void swap(CellGrid&, CellGrid&);
+	friend void swap(CellGrid&, CellGrid&) noexcept;
 	// friend int main(); // for debugging
 };
 
-void swap(CellGrid& grid, CellGrid& grid2) {
+CellGrid::iterator begin(CellGrid& grid) { return grid.begin(); }
+CellGrid::iterator end(CellGrid& grid) { return grid.end(); }
+//CellGrid::iterator rbegin(CellGrid& grid) { return grid.rbegin(); }
+//CellGrid::iterator rend(CellGrid& grid) { return grid.rend(); }
+CellGrid::iterator cbegin(CellGrid& grid) { return grid.cbegin(); }
+CellGrid::iterator cend(CellGrid& grid) { return grid.cend(); }
+//CellGrid::iterator crbegin(CellGrid& grid) { return grid.crbegin(); }
+//CellGrid::iterator crend(CellGrid& grid) { return grid.crend(); }
+void swap(CellGrid& grid, CellGrid& grid2) noexcept {
+	auto w{grid.w}, h{grid.h}, esh{grid.esh}, gen{grid.gen};
 	bool** dat{grid.dat}, ** act{grid.act},
-		 * dst{grid.dst},  * dpv{grid.dpv}, * dcr{grid.dcr},
+	     * dst{grid.dst},  * dpv{grid.dpv}, * dcr{grid.dcr},
 	     * acr{grid.acr},  * anx{grid.anx}, * als{grid.als},
 	     * dlf{grid.dlf},  * drg{grid.drg},
-	    started{grid.started};
+	    started{grid.started}, vsh{grid.vsh};
 	auto* pRow{grid.pRow};
 	auto rule{grid.rule.code};
 	char* rstr{grid.rule.srep},
 	    tpid{grid.edge.id};
+	grid.w = grid2.w;
+	grid.h = grid2.h;
 	grid.dat = grid2.dat;
 	grid.act = grid2.act;
 	grid.dst = grid2.dst;
@@ -1362,6 +1713,11 @@ void swap(CellGrid& grid, CellGrid& grid2) {
 	grid.rule.code = grid2.rule.code;
 	grid.rule.srep = grid2.rule.srep;
 	grid.edge.id = grid2.edge.id;
+	grid.esh = grid2.esh;
+	grid.vsh = grid2.vsh;
+	grid.gen = grid2.gen;
+	grid2.w = w;
+	grid2.h = h;
 	grid2.dat = dat;
 	grid2.act = act;
 	grid2.dst = dst;
@@ -1376,9 +1732,14 @@ void swap(CellGrid& grid, CellGrid& grid2) {
 	grid2.started = started;
 	grid2.rule.code = rule;
 	grid2.rule.srep = rstr;
+	std::swap(grid.rule.bArr, grid2.rule.bArr);
+	std::swap(grid.rule.dArr, grid2.rule.dArr);
 	grid2.edge.id = tpid;
+	grid2.esh = esh;
+	grid2.vsh = vsh;
+	grid2.gen = gen;
 }
-void swap(CellGrid::Rule& rule, CellGrid::Rule& rule2) {
+void swap(CellGrid::Rule& rule, CellGrid::Rule& rule2) noexcept {
 	auto code{rule.code};
 	char* srep{rule.srep};
 	rule.code = rule2.code;
@@ -1388,14 +1749,14 @@ void swap(CellGrid::Rule& rule, CellGrid::Rule& rule2) {
 	std::swap(rule.bArr, rule2.bArr);
 	std::swap(rule.dArr, rule2.dArr);
 }
-void swap(CellGrid::Topology& top, CellGrid::Topology& top2) {
+void swap(CellGrid::Topology& top, CellGrid::Topology& top2) noexcept {
 	char id{top.id};
 	top.id = top2.id;
 	top2.id = id;
 }
 std::ostream& operator<<(std::ostream& out, const CellGrid& grid) {
-	grid.print();
-	return out;
+	grid.print(false, out); // Switch this to printSafe(false, 0, 0, out) if the
+	return out;             //  special characters used in print() do not work
 }
 std::istream& operator>>(std::istream& in, CellGrid::Rule& rule) {
 	// Warning: This function currently always extracts 20 characters, even if the rulestring ends before then
@@ -1409,27 +1770,94 @@ std::istream& operator>>(std::istream& in, CellGrid::Rule& rule) {
 }
 std::ostream& operator<<(std::ostream& out, const CellGrid::Rule& rule) { return out << rule.cstr(); }
 std::istream& operator>>(std::istream& in, CellGrid::Topology& top) {
-	// Warning: This function currently always extracts 23 characters if the first character is not a number 0-5
+	// this function might be the worst code i've ever written. enjoy :D
 	char inCh;
 	in >> inCh;
+	constexpr signed char capDiff{ 'a' - 'A' }; // usually +32 but i want to make sure
+	#define ct(ch) ((in >> inCh, inCh) == ch || inCh + capDiff == ch)
 	switch (inCh) {
 	case '0': case '1': case '2': case '3': case '4': case '5':
-		top = CellGrid::Topology{inCh};
+		top = CellGrid::Topology{ inCh };
 		break;
-	default:
-		char input[24];
-		*input = inCh;
-		in.getline(input + 1, 24);
-		// istream::operator>> doesn't work with char*, you have to use getline. thanks ChatGPT!!
-		for (int i{};;) if (strcmp(input, CellGrid::Topology::names[i])) {
-			top = i;
-			break;
+	case 'P': case 'p':
+		if (ct('l') && ct('a') && ct('n') && ct('e')) {
+			top = CellGrid::plane;
+			return in;
 		}
-		else if (++i == 6) {
-			in.setstate(in.failbit);
+		break;
+	case 'T': case 't':
+		if (ct('o') && ct('r') && ct('u') && ct('s')) {
+			top = CellGrid::torus;
+			return in;
+		}
+		break;
+	case 'V': case 'v':
+		in >> inCh;
+		switch (inCh) {
+		case 'E': case 'e':
+			if (ct('r') && ct('t') && ct('i') && ct('c') && ct('a') && ct('l')) {
+				in >> inCh;
+				switch (inCh) {
+				case ' ': case '\t': case '\v': case '\n': case '-': case '_':
+					if (ct('b')) break;
+				default:
+					in.setstate(in.failbit);
+					return in;
+				}
+			}
+		case 'B': case 'b':
 			break;
+		default:
+			in.setstate(in.failbit);
+			return in;
+		}
+		[[fallthrough]];
+	case 'B': case 'b':
+		if (ct('o') && ct('t') && ct('t') && ct('l') && ct('e')) {
+			top = CellGrid::vbottle;
+			return in;
+		}
+		break;
+	case 'H': case 'h':
+		if (ct('o')) {
+			if (ct('r') && ct('i') && ct('z') && ct('o') && ct('n') && ct('t') && ct('a') && ct('l'))
+				switch(in >> inCh, inCh) {
+				case ' ': case '\t': case '\v': case '\n': case '-': case '_':
+					in >> inCh;
+					break;
+				default:
+					in.setstate(in.failbit);
+					return in;
+				}
+			else {
+				in.setstate(in.failbit);
+				return in;
+			}
+		}
+		if (inCh == 'B' || inCh == 'b') {
+			if (ct('o') && ct('t') && ct('t') && ct('l') && ct('e')) {
+				top = CellGrid::hbottle;
+				return in;
+			}
+		}
+		break;
+	case 'C': case 'c':
+		if (ct('r') && ct('o') && ct('s') && ct('s')) switch(in >> inCh, inCh) {
+		case ' ': case '\t': case '\v': case '\n': case '-': case '_':
+			if (ct('s') && ct('u') && ct('r') && ct('f') && ct('a') && ct('c') && ct('e')) {
+				top = CellGrid::cross;
+				return in;
+			}
+		}
+		break;
+	case 'S': case 's':
+		if (ct('p') && ct('h') && ct('e') && ct('r') && ct('e')) {
+			top = CellGrid::sphere;
+			return in;
 		}
 	}
+	// figure out how to put stuff back in the stream
+	in.setstate(in.failbit);
 	return in;
 }
 std::ostream& operator<<(std::ostream& out, const CellGrid::Topology& top) { return out << top.cstr(); }
@@ -1442,9 +1870,7 @@ const CellGrid::Topology
 	CellGrid::hbottle{3},
 	CellGrid::cross{4},
 	CellGrid::sphere{5};
-char CellGrid::Topology::names[6][24]
-	{ "plane", "torus", "Klein bottle", "Klein bottle", "cross-surface", "sphere" };
-// 24 chars is just enough space to fit "horizontal Klein bottle" if you want to change the fourth one to that
+CellGrid::u32 CellGrid::defaultRule{ 0b00000110000000100i32 }; // == 3076 == "B3/S23" == Conway's Game of Life
 
 #endif
 
